@@ -25,4 +25,3 @@ docker-compose.override.yml
 # Environment
 .env
 *.env.local
-*.md
