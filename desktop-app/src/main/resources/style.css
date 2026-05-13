@@ -1,0 +1,57 @@
+.root { -fx-background-color: #1a1a2e; }
+.top-bar { -fx-background-color: #16213e; -fx-padding: 12 20; }
+.top-title { -fx-font-size: 22px; -fx-font-weight: bold; -fx-fill: #e94560; }
+.logout-btn { -fx-background-color: transparent; -fx-text-fill: #aaa; -fx-font-size: 13px; -fx-cursor: hand; }
+.logout-btn:hover { -fx-text-fill: #e94560; }
+
+.tab-pane { -fx-background-color: #1a1a2e; }
+.tab-pane .tab-header-area .tab-header-background { -fx-background-color: #16213e; }
+.tab { -fx-background-color: #16213e; -fx-padding: 8 16; }
+.tab:selected { -fx-background-color: #1a1a2e; -fx-border-color: #e94560; -fx-border-width: 0 0 3 0; }
+.tab .tab-label { -fx-text-fill: #888; -fx-font-size: 13px; }
+.tab:selected .tab-label { -fx-text-fill: #e94560; }
+
+.card { -fx-background-color: #16213e; -fx-background-radius: 10; -fx-padding: 18; -fx-min-width: 200; }
+.card-title { -fx-font-size: 12px; -fx-fill: #aaa; }
+.card-value { -fx-font-size: 26px; -fx-font-weight: bold; }
+.card-positive { -fx-fill: #4ecca3; }
+.card-negative { -fx-fill: #e94560; }
+.card-neutral { -fx-fill: #eee; }
+
+.table-view { -fx-background-color: #16213e; -fx-table-cell-border-color: transparent; }
+.table-view .column-header { -fx-background-color: #0f3460; }
+.table-view .column-header .label { -fx-text-fill: #ccc; -fx-font-weight: bold; }
+.table-view .table-row-cell { -fx-background-color: #16213e; -fx-text-fill: #ddd; }
+.table-view .table-row-cell:odd { -fx-background-color: #1a2744; }
+.table-view .table-row-cell:selected { -fx-background-color: #e94560; }
+
+.chart { -fx-background-color: #16213e; -fx-background-radius: 10; }
+.chart-title { -fx-text-fill: #ccc; -fx-font-size: 14px; }
+.chart-legend { -fx-background-color: transparent; }
+.chart-legend-item { -fx-text-fill: #aaa; }
+.axis { -fx-tick-label-fill: #888; }
+.axis-label { -fx-text-fill: #888; }
+
+.progress-bar { -fx-accent: #4ecca3; }
+.progress-bar .track { -fx-background-color: #0f3460; }
+.progress-bar-warn { -fx-accent: #e94560; }
+
+.btn { -fx-background-radius: 6; -fx-font-size: 13px; -fx-padding: 8 16; -fx-cursor: hand; }
+.btn-primary { -fx-background-color: #e94560; -fx-text-fill: white; }
+.btn-primary:hover { -fx-background-color: #c73650; }
+.btn-success { -fx-background-color: #4ecca3; -fx-text-fill: #1a1a2e; }
+.btn-success:hover { -fx-background-color: #3db88f; }
+.btn-danger { -fx-background-color: transparent; -fx-text-fill: #e94560; -fx-border-color: #e94560; -fx-border-radius: 6; -fx-border-width: 1; }
+.btn-danger:hover { -fx-background-color: #e94560; -fx-text-fill: white; }
+
+.text-field { -fx-background-color: #0f3460; -fx-text-fill: #eee; -fx-background-radius: 6; -fx-padding: 10; -fx-border-color: #1a1a2e; -fx-border-radius: 6; }
+.text-field:focused { -fx-border-color: #e94560; }
+
+.dialog { -fx-background-color: #16213e; -fx-background-radius: 12; -fx-padding: 20; }
+.dialog-title { -fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #e94560; }
+.dialog-label { -fx-text-fill: #aaa; -fx-font-size: 13px; }
+
+.badge { -fx-background-color: #e94560; -fx-text-fill: white; -fx-background-radius: 10; -fx-padding: 2 8; -fx-font-size: 11px; -fx-font-weight: bold; }
+
+.scroll-pane { -fx-background: #1a1a2e; -fx-border-color: transparent; }
+.scroll-pane .viewport { -fx-background-color: #1a1a2e; }
