@@ -1,0 +1,9 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: transaction-service
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/finanscepte_transaction}
