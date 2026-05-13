@@ -1,0 +1,9 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: report-service
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/finanscepte_report}
