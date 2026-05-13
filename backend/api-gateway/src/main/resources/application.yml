@@ -1,0 +1,43 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: service-user
+          uri: http://service-user:8081
+          predicates:
+            - Path=/api/users/**
+        - id: service-product
+          uri: http://service-product:8082
+          predicates:
+            - Path=/api/products/**
+        - id: transaction-service
+          uri: http://transaction-service:8083
+          predicates:
+            - Path=/api/transactions/**
+        - id: subscription-service
+          uri: http://subscription-service:8084
+          predicates:
+            - Path=/api/subscriptions/**
+        - id: budget-service
+          uri: http://budget-service:8085
+          predicates:
+            - Path=/api/budgets/**
+        - id: notification-service
+          uri: http://notification-service:8086
+          predicates:
+            - Path=/api/notifications/**
+        - id: report-service
+          uri: http://report-service:8087
+          predicates:
+            - Path=/api/reports/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
