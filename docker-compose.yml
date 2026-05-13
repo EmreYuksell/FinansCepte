@@ -1,0 +1,165 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: financescepte-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: financescepte
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - financescepte-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  service-user:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: service-user
+    container_name: service-user
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_user
+      SPRING_PROFILES_ACTIVE: mongo
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  service-product:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: service-product
+    container_name: service-product
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_product
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  transaction-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: transaction-service
+    container_name: transaction-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_transaction
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  subscription-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: subscription-service
+    container_name: subscription-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_subscription
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  budget-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: budget-service
+    container_name: budget-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_budget
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  notification-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: notification-service
+    container_name: notification-service
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_notification
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  report-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: report-service
+    container_name: report-service
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_report
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - service-user
+      - service-product
+      - transaction-service
+      - subscription-service
+      - budget-service
+      - notification-service
+      - report-service
+    networks:
+      - financescepte-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  financescepte-network:
+    driver: bridge
