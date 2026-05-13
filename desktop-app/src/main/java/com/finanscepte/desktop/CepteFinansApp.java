@@ -20,11 +20,15 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import javafx.util.StringConverter;
-
+import java.io.FileWriter;
 import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class CepteFinansApp extends Application {
@@ -40,6 +44,7 @@ public class CepteFinansApp extends Application {
 
     // Dashboard özet
     private Label totalIncomeLbl, totalExpenseLbl, balanceLbl, budgetStatusLbl, unreadCountLbl;
+    private Label incomeChangeLbl, expenseChangeLbl, balanceChangeLbl;
     private PieChart categoryPie;
     private BarChart<String, Number> monthlyBar;
 
@@ -47,6 +52,20 @@ public class CepteFinansApp extends Application {
     private FinancialGaugeCanvas gaugeCanvas;
     private SparklineCanvas incomeSparkline;
     private SparklineCanvas expenseSparkline;
+
+    // Otomatik yenileme
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> autoRefreshTask;
+
+    // İşlem filtre alanları
+    private DatePicker txStartDate, txEndDate;
+    private ComboBox<String> txTypeFilter;
+
+    // Bildirim detay paneli
+    private Label notifDetailLbl;
+
+    // Bütçe filtre alanları
+    private ComboBox<String> budgetMonthFilter, budgetYearFilter;
 
     @Override
     public void start(Stage s) { primaryStage = s; showLogin(); }
@@ -90,6 +109,11 @@ public class CepteFinansApp extends Application {
         scene.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
         primaryStage.setScene(scene);
         primaryStage.setMaximized(true);
+
+        // Her 60 saniyede dashboard'u otomatik yenile
+        if (autoRefreshTask != null) autoRefreshTask.cancel(false);
+        autoRefreshTask = scheduler.scheduleAtFixedRate(
+            () -> Platform.runLater(this::refreshDashboard), 60, 60, TimeUnit.SECONDS);
     }
 
     private HBox buildTopBar() {
@@ -146,16 +170,19 @@ public class CepteFinansApp extends Application {
         VBox main = new VBox(20);
         main.setPadding(new Insets(20));
 
-        // Özet kartları
+        // Özet kartıları
         HBox cards = new HBox(15);
-        totalIncomeLbl = cardValue("");
+        totalIncomeLbl  = cardValue("");
         totalExpenseLbl = cardValue("");
-        balanceLbl = cardValue("");
+        balanceLbl      = cardValue("");
         budgetStatusLbl = cardValue("");
+        incomeChangeLbl  = changeLbl();
+        expenseChangeLbl = changeLbl();
+        balanceChangeLbl = changeLbl();
         cards.getChildren().addAll(
-            cardBox("Toplam Gelir", totalIncomeLbl, "card-positive"),
-            cardBox("Toplam Gider", totalExpenseLbl, "card-negative"),
-            cardBox("Net Bakiye", balanceLbl, "card-neutral"),
+            cardBoxWithChange("Toplam Gelir",  totalIncomeLbl,  incomeChangeLbl,  "card-positive"),
+            cardBoxWithChange("Toplam Gider",  totalExpenseLbl, expenseChangeLbl, "card-negative"),
+            cardBoxWithChange("Net Bakiye",     balanceLbl,      balanceChangeLbl, "card-neutral"),
             cardBox("Bütçe Durumu", budgetStatusLbl, "card-positive")
         );
 
@@ -208,7 +235,7 @@ public class CepteFinansApp extends Application {
     }
 
     private VBox cardBox(String title, Label value, String styleClass) {
-        VBox card = new VBox(8);
+        VBox card = new VBox(6);
         card.getStyleClass().add("card");
         card.setAlignment(Pos.CENTER_LEFT);
         Label t = new Label(title);
@@ -222,6 +249,29 @@ public class CepteFinansApp extends Application {
         Label l = new Label(text); return l;
     }
 
+    private VBox cardBoxWithChange(String title, Label value, Label change, String styleClass) {
+        VBox card = cardBox(title, value, styleClass);
+        card.getChildren().add(change);
+        return card;
+    }
+
+    private Label changeLbl() {
+        Label l = new Label("");
+        l.setStyle("-fx-font-size: 11px; -fx-text-fill: #888;");
+        return l;
+    }
+
+    private String changeStr(double current, double prev) {
+        if (prev == 0) return "";
+        double pct = (current - prev) / Math.abs(prev) * 100;
+        return String.format("%s%.1f%% geçen aya göre", pct >= 0 ? "▲ " : "▼ ", Math.abs(pct));
+    }
+
+    private Color changeColor(double current, double prev) {
+        if (prev == 0) return Color.GRAY;
+        return current >= prev ? Color.web("#4ecca3") : Color.web("#e94560");
+    }
+
     private void refreshDashboard() {
         new Thread(() -> {
             try {
@@ -229,7 +279,11 @@ public class CepteFinansApp extends Application {
                 JsonNode[] bg = ApiClient.get("/api/budgets", JsonNode[].class);
                 JsonNode[] nf = ApiClient.get("/api/notifications", JsonNode[].class);
 
+                String curMonth  = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+                String prevMonth = LocalDate.now().minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM"));
+
                 double income = 0, expense = 0;
+                double prevIncome = 0, prevExpense = 0;
                 Map<String, Double> categorySpending = new HashMap<>();
                 Map<String, Double> monthlyIncome = new TreeMap<>();
                 Map<String, Double> monthlyExpense = new TreeMap<>();
@@ -237,34 +291,28 @@ public class CepteFinansApp extends Application {
                 for (JsonNode t : tx) {
                     double amt = t.get("amount").asDouble();
                     String type = t.get("type").asText();
-                    String month = t.get("createdAt").asText().substring(0, 7); // 2026-05
+                    String month = t.has("createdAt") && !t.get("createdAt").isNull()
+                        ? t.get("createdAt").asText().substring(0, 7) : curMonth;
 
                     if (type.equalsIgnoreCase("GELIR")) {
                         income += amt;
                         monthlyIncome.merge(month, amt, Double::sum);
+                        if (month.equals(prevMonth)) prevIncome += amt;
                     } else {
                         expense += amt;
                         monthlyExpense.merge(month, amt, Double::sum);
+                        if (month.equals(prevMonth)) prevExpense += amt;
                         String cat = t.has("description") && !t.get("description").asText().isEmpty() ? t.get("description").asText() : "Diğer";
                         categorySpending.merge(cat.length() > 12 ? cat.substring(0,12) : cat, amt, Double::sum);
                     }
                 }
 
-                double balance = income - expense;
-
-                int budgetOver = 0;
-                if (bg != null) {
-                    for (JsonNode b : bg) {
-                        double spent = b.get("spentAmount").asDouble();
-                        double limit = b.get("limitAmount").asDouble();
-                        if (spent >= limit) budgetOver++;
-                    }
-                }
-
                 double finalIncome = income, finalExpense = expense, finalBalance = income - expense;
+                double fPrevIncome = prevIncome, fPrevExpense = prevExpense, fPrevBalance = prevIncome - prevExpense;
+                int budgetOver = 0;
+                if (bg != null) for (JsonNode b : bg) { if (b.get("spentAmount").asDouble() >= b.get("limitAmount").asDouble()) budgetOver++; }
                 int finalBudgetOver = budgetOver;
 
-                // Sparkline için aylık serileri listele
                 List<Double> incomeValues  = new ArrayList<>(monthlyIncome.values());
                 List<Double> expenseValues = new ArrayList<>(monthlyExpense.values());
 
@@ -274,42 +322,38 @@ public class CepteFinansApp extends Application {
                     balanceLbl.setText(tl.format(finalBalance));
                     budgetStatusLbl.setText(finalBudgetOver > 0 ? "⚠ " + finalBudgetOver + " aşıldı" : "✓ Tümü limit içinde");
 
-                    // ── Custom Graphics güncellemeleri ─────────────────────
-                    // Gauge: gelir/gider oranını animate et
-                    gaugeCanvas.update(finalIncome, finalExpense);
+                    // Değişim yüzdeleri
+                    incomeChangeLbl.setText(changeStr(finalIncome, fPrevIncome));
+                    expenseChangeLbl.setText(changeStr(finalExpense, fPrevExpense));
+                    balanceChangeLbl.setText(changeStr(finalBalance, fPrevBalance));
 
-                    // Sparkline: aylık trend verilerini aktar
+                    // Custom Graphics
+                    gaugeCanvas.update(finalIncome, finalExpense);
                     if (!incomeValues.isEmpty())  incomeSparkline.setData(incomeValues);
                     if (!expenseValues.isEmpty()) expenseSparkline.setData(expenseValues);
 
                     // Pasta grafik
                     categoryPie.getData().clear();
-                    int ci = 0;
-                    for (Map.Entry<String, Double> e : categorySpending.entrySet()) {
-                        PieChart.Data d = new PieChart.Data(e.getKey(), e.getValue());
-                        categoryPie.getData().add(d);
-                        ci++;
-                    }
+                    for (Map.Entry<String, Double> e : categorySpending.entrySet())
+                        categoryPie.getData().add(new PieChart.Data(e.getKey(), e.getValue()));
 
                     // Çubuk grafik
                     monthlyBar.getData().clear();
                     XYChart.Series<String, Number> incSeries = new XYChart.Series<>(); incSeries.setName("Gelir");
                     XYChart.Series<String, Number> expSeries = new XYChart.Series<>(); expSeries.setName("Gider");
-
                     Set<String> months = new TreeSet<>(); months.addAll(monthlyIncome.keySet()); months.addAll(monthlyExpense.keySet());
-                    if (months.isEmpty()) months.add(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM")));
+                    if (months.isEmpty()) months.add(curMonth);
                     for (String m : months) {
                         incSeries.getData().add(new XYChart.Data<>(m, monthlyIncome.getOrDefault(m, 0.0)));
                         expSeries.getData().add(new XYChart.Data<>(m, monthlyExpense.getOrDefault(m, 0.0)));
                     }
                     monthlyBar.getData().addAll(incSeries, expSeries);
 
-                    // Okunmamış bildirim sayısı
+                    // Okunmamış bildirim
                     long unread = nf != null ? Arrays.stream(nf).filter(n -> !n.get("read").asBoolean()).count() : 0;
                     unreadCountLbl.setText(String.valueOf(unread));
                     unreadCountLbl.setVisible(unread > 0);
                 });
-
             } catch (Exception ex) { Platform.runLater(() -> {}); }
         }).start();
     }
@@ -352,9 +396,11 @@ public class CepteFinansApp extends Application {
     // ================ İŞLEMLER ================
     private VBox buildTransactionsView() {
         transactionTable = new TableView<>(); transactionList = FXCollections.observableArrayList();
+        transactionTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         transactionTable.getColumns().addAll(col("Tarih","createdAt",160), col("Tür","type",70), col("Tutar","amount",100), col("Açıklama","description",250));
         transactionTable.setItems(transactionList);
 
+        // Çift tıklama ile düzenleme
         transactionTable.setRowFactory(tv -> {
             TableRow<JsonNode> row = new TableRow<>();
             row.itemProperty().addListener((obs, old, item) -> {
@@ -363,39 +409,100 @@ public class CepteFinansApp extends Application {
                     row.setStyle(type.equalsIgnoreCase("GELIR") ? "-fx-text-fill: #4ecca3;" : "-fx-text-fill: #e94560;");
                 }
             });
+            row.setOnMouseClicked(e -> { if (e.getClickCount() == 2 && !row.isEmpty()) showTransactionDialog(row.getItem()); });
             return row;
         });
 
-        ComboBox<String> typeFilter = new ComboBox<>(FXCollections.observableArrayList("Tümü", "GELIR", "GIDER"));
-        typeFilter.setValue("Tümü"); typeFilter.setStyle("-fx-background-color: #0f3460; -fx-text-fill: #eee;");
+        txTypeFilter = new ComboBox<>(FXCollections.observableArrayList("Tümü", "GELIR", "GIDER"));
+        txTypeFilter.setValue("Tümü"); txTypeFilter.setStyle("-fx-background-color: #0f3460; -fx-text-fill: #eee;");
+        txTypeFilter.setOnAction(e -> loadTransactions());
+
+        txStartDate = new DatePicker(); txStartDate.setPromptText("Başlangıç"); txStartDate.setPrefWidth(140);
+        txEndDate   = new DatePicker(); txEndDate.setPromptText("Bitiş");     txEndDate.setPrefWidth(140);
+        txStartDate.setOnAction(e -> loadTransactions());
+        txEndDate.setOnAction(e -> loadTransactions());
 
         HBox bar = btnBar(
-            btn("Yenile", "btn-success", () -> loadTransactions()),
-            btn("Yeni İşlem", "btn-primary", () -> showTransactionDialog(null)),
-            btn("Sil", "btn-danger", () -> deleteSelected(transactionTable, "/api/transactions/", this::loadTransactions)),
-            typeFilter
+            btn("Yenile",       "btn-success", this::loadTransactions),
+            btn("Yeni İşlem",   "btn-primary", () -> showTransactionDialog(null)),
+            btn("Seçileni Sil", "btn-danger",  this::deleteSelectedTransactions),
+            btn("CSV Aktar",    "btn-success", this::exportTransactionsCsv),
+            txTypeFilter, txStartDate, txEndDate
         );
-        typeFilter.setOnAction(e -> loadTransactions());
         return vbox(bar, transactionTable);
     }
 
     private void loadTransactions() {
         new Thread(() -> {
-            try { JsonNode[] d = ApiClient.get("/api/transactions", JsonNode[].class); Platform.runLater(() -> { transactionList.clear(); transactionList.addAll(d); }); } catch (Exception e) {}
+            try {
+                JsonNode[] all = ApiClient.get("/api/transactions", JsonNode[].class);
+                String typeVal = txTypeFilter != null ? txTypeFilter.getValue() : "Tümü";
+                LocalDate start = txStartDate != null ? txStartDate.getValue() : null;
+                LocalDate end   = txEndDate   != null ? txEndDate.getValue()   : null;
+                List<JsonNode> filtered = Arrays.stream(all).filter(t -> {
+                    if (!"Tümü".equals(typeVal) && !t.get("type").asText().equalsIgnoreCase(typeVal)) return false;
+                    if (start != null && t.has("createdAt") && !t.get("createdAt").isNull()) {
+                        LocalDate d = LocalDate.parse(t.get("createdAt").asText().substring(0,10));
+                        if (d.isBefore(start)) return false;
+                    }
+                    if (end != null && t.has("createdAt") && !t.get("createdAt").isNull()) {
+                        LocalDate d = LocalDate.parse(t.get("createdAt").asText().substring(0,10));
+                        if (d.isAfter(end)) return false;
+                    }
+                    return true;
+                }).collect(Collectors.toList());
+                Platform.runLater(() -> { transactionList.clear(); transactionList.addAll(filtered); });
+            } catch (Exception e) {}
         }).start();
+    }
+
+    private void deleteSelectedTransactions() {
+        List<JsonNode> selected = new ArrayList<>(transactionTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) return;
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, selected.size() + " işlem silinecek. Emin misiniz?", ButtonType.OK, ButtonType.CANCEL);
+        confirm.showAndWait().ifPresent(bt -> { if (bt == ButtonType.OK)
+            new Thread(() -> { for (JsonNode n : selected) { try { ApiClient.delete("/api/transactions/" + n.get("id").asText()); } catch (Exception ex) {} } Platform.runLater(this::loadTransactions); }).start();
+        });
+    }
+
+    private void exportTransactionsCsv() {
+        try (FileWriter fw = new FileWriter("transactions_export.csv")) {
+            fw.write("Tarih,Tür,Tutar,Açıklama\n");
+            for (JsonNode t : transactionList) {
+                fw.write(String.format("%s,%s,%s,%s\n",
+                    t.has("createdAt") ? t.get("createdAt").asText() : "",
+                    t.get("type").asText(),
+                    t.get("amount").asText(),
+                    t.has("description") ? t.get("description").asText().replace(","," ") : ""));
+            }
+            Platform.runLater(() -> new Alert(Alert.AlertType.INFORMATION, "CSV kaydedildi: transactions_export.csv").show());
+        } catch (Exception e) {
+            Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, "CSV hatası: " + e.getMessage()).show());
+        }
     }
 
     private void showTransactionDialog(JsonNode existing) {
         Stage d = dialog("İşlem", existing != null);
         GridPane g = formGrid();
         TextField userId = field("Kullanıcı ID"); TextField amount = field("Tutar");
-        ComboBox<String> typeCb = new ComboBox<>(FXCollections.observableArrayList("GELIR", "GIDER")); typeCb.setValue("GELIR"); typeCb.setStyle("-fx-background-color: #0f3460; -fx-text-fill: #eee;");
+        ComboBox<String> typeCb = new ComboBox<>(FXCollections.observableArrayList("GELIR", "GIDER"));
+        typeCb.setValue("GELIR"); typeCb.setStyle("-fx-background-color: #0f3460; -fx-text-fill: #eee;");
         TextField desc = field("Açıklama");
+        if (existing != null) {
+            userId.setText(existing.has("userId") ? existing.get("userId").asText() : "");
+            amount.setText(existing.get("amount").asText());
+            typeCb.setValue(existing.get("type").asText());
+            desc.setText(existing.has("description") ? existing.get("description").asText() : "");
+        }
         formRow(g, "Kullanıcı", userId, 0); formRow(g, "Tutar", amount, 1); formRowCb(g, "Tür", typeCb, 2); formRow(g, "Açıklama", desc, 3);
-
         Button save = btn("Kaydet", "btn-primary", () -> {
-            try { String json = String.format("{\"userId\":\"%s\",\"amount\":%s,\"type\":\"%s\",\"description\":\"%s\"}", userId.getText(), amount.getText(), typeCb.getValue(), desc.getText());
-                ApiClient.post("/api/transactions", json); d.close(); loadTransactions(); } catch (Exception ex) {}
+            try {
+                String json = String.format("{\"userId\":\"%s\",\"amount\":%s,\"type\":\"%s\",\"description\":\"%s\"}",
+                    userId.getText(), amount.getText(), typeCb.getValue(), desc.getText());
+                if (existing != null) ApiClient.put("/api/transactions/" + existing.get("id").asText(), json);
+                else ApiClient.post("/api/transactions", json);
+                d.close(); loadTransactions();
+            } catch (Exception ex) { new Alert(Alert.AlertType.ERROR, ex.getMessage()).show(); }
         });
         g.add(save, 1, 4);
         d.setScene(new Scene(g, 400, 260)); d.show();
@@ -423,7 +530,6 @@ public class CepteFinansApp extends Application {
                 setGraphic(pb);
             }
         });
-
         TableColumn<JsonNode, String> percCol = col("%","spentAmount",60);
         percCol.setCellFactory(tc -> new TableCell<JsonNode, String>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -435,21 +541,50 @@ public class CepteFinansApp extends Application {
                 setStyle((spent >= limit) ? "-fx-text-fill: #e94560;" : "-fx-text-fill: #4ecca3;");
             }
         });
-
         budgetTable.getColumns().addAll(col("Ay","month",50), col("Yıl","year",50), catCol, limitCol, spentCol, progCol, percCol);
         budgetTable.setItems(budgetList);
 
+        // Ay/Yıl filtre
+        budgetMonthFilter = new ComboBox<>(FXCollections.observableArrayList("Tümü","1","2","3","4","5","6","7","8","9","10","11","12"));
+        budgetMonthFilter.setValue("Tümü"); budgetMonthFilter.setStyle("-fx-background-color: #0f3460; -fx-text-fill: #eee;");
+        budgetMonthFilter.setOnAction(e -> loadBudgets());
+        int curYear = LocalDate.now().getYear();
+        budgetYearFilter = new ComboBox<>(FXCollections.observableArrayList("Tümü", String.valueOf(curYear-1), String.valueOf(curYear), String.valueOf(curYear+1)));
+        budgetYearFilter.setValue("Tümü"); budgetYearFilter.setStyle("-fx-background-color: #0f3460; -fx-text-fill: #eee;");
+        budgetYearFilter.setOnAction(e -> loadBudgets());
+
         HBox bar = btnBar(
-            btn("Yenile", "btn-success", () -> loadBudgets()),
+            btn("Yenile",     "btn-success", this::loadBudgets),
             btn("Yeni Bütçe", "btn-primary", () -> showBudgetDialog(null)),
-            btn("Sil", "btn-danger", () -> deleteSelected(budgetTable, "/api/budgets/", this::loadBudgets))
+            btn("Düzenle",    "btn-primary", () -> { JsonNode s = budgetTable.getSelectionModel().getSelectedItem(); if (s != null) showBudgetDialog(s); }),
+            btn("Sil",        "btn-danger",  this::deleteBudgetWithConfirm),
+            budgetMonthFilter, budgetYearFilter
         );
         return vbox(bar, budgetTable);
     }
 
+    private void deleteBudgetWithConfirm() {
+        JsonNode sel = budgetTable.getSelectionModel().getSelectedItem();
+        if (sel == null) return;
+        Alert a = new Alert(Alert.AlertType.CONFIRMATION, "Seçili bütçe silinecek. Emin misiniz?", ButtonType.OK, ButtonType.CANCEL);
+        a.showAndWait().ifPresent(bt -> { if (bt == ButtonType.OK)
+            new Thread(() -> { try { ApiClient.delete("/api/budgets/" + sel.get("id").asText()); Platform.runLater(this::loadBudgets); } catch (Exception ex) {} }).start();
+        });
+    }
+
     private void loadBudgets() {
         new Thread(() -> {
-            try { JsonNode[] d = ApiClient.get("/api/budgets", JsonNode[].class); Platform.runLater(() -> { budgetList.clear(); budgetList.addAll(d); }); } catch (Exception e) {}
+            try {
+                JsonNode[] all = ApiClient.get("/api/budgets", JsonNode[].class);
+                String mf = budgetMonthFilter != null ? budgetMonthFilter.getValue() : "Tümü";
+                String yf = budgetYearFilter  != null ? budgetYearFilter.getValue()  : "Tümü";
+                List<JsonNode> filtered = Arrays.stream(all).filter(b -> {
+                    if (!"Tümü".equals(mf) && b.has("month") && !b.get("month").asText().equals(mf)) return false;
+                    if (!"Tümü".equals(yf) && b.has("year")  && !b.get("year").asText().equals(yf))  return false;
+                    return true;
+                }).collect(Collectors.toList());
+                Platform.runLater(() -> { budgetList.clear(); budgetList.addAll(filtered); });
+            } catch (Exception e) {}
         }).start();
     }
 
@@ -457,11 +592,22 @@ public class CepteFinansApp extends Application {
         Stage d = dialog("Bütçe", existing != null);
         GridPane g = formGrid();
         TextField userId = field("Kullanıcı ID"), cat = field("Kategori"), limit = field("Limit"), month = field("Ay (1-12)"), year = field("Yıl");
+        if (existing != null) {
+            userId.setText(existing.has("userId") ? existing.get("userId").asText() : "");
+            cat.setText(existing.get("category").asText());
+            limit.setText(existing.get("limitAmount").asText());
+            month.setText(existing.get("month").asText());
+            year.setText(existing.get("year").asText());
+        }
         formRow(g, "Kullanıcı", userId, 0); formRow(g, "Kategori", cat, 1); formRow(g, "Limit", limit, 2); formRow(g, "Ay", month, 3); formRow(g, "Yıl", year, 4);
-
         Button save = btn("Kaydet", "btn-primary", () -> {
-            try { String json = String.format("{\"userId\":\"%s\",\"category\":\"%s\",\"limitAmount\":%s,\"month\":%s,\"year\":%s}", userId.getText(), cat.getText(), limit.getText(), month.getText(), year.getText());
-                ApiClient.post("/api/budgets", json); d.close(); loadBudgets(); } catch (Exception ex) {}
+            try {
+                String json = String.format("{\"userId\":\"%s\",\"category\":\"%s\",\"limitAmount\":%s,\"month\":%s,\"year\":%s}",
+                    userId.getText(), cat.getText(), limit.getText(), month.getText(), year.getText());
+                if (existing != null) ApiClient.put("/api/budgets/" + existing.get("id").asText(), json);
+                else ApiClient.post("/api/budgets", json);
+                d.close(); loadBudgets();
+            } catch (Exception ex) { new Alert(Alert.AlertType.ERROR, ex.getMessage()).show(); }
         });
         g.add(save, 1, 5);
         d.setScene(new Scene(g, 400, 290)); d.show();
@@ -474,15 +620,29 @@ public class CepteFinansApp extends Application {
         notifTable.getStyleClass().add("table-view");
         notifTable.setItems(notifList);
 
+        // Detay paneli
+        notifDetailLbl = new Label("Bir bildirim seçin...");
+        notifDetailLbl.setStyle("-fx-text-fill: #ccc; -fx-font-size: 13px; -fx-padding: 12; -fx-background-color: #16213e; -fx-background-radius: 8; -fx-wrap-text: true;");
+        notifDetailLbl.setMaxWidth(Double.MAX_VALUE);
+        notifTable.getSelectionModel().selectedItemProperty().addListener((obs, old, sel) -> {
+            if (sel != null) {
+                String msg  = sel.has("message") ? sel.get("message").asText() : "";
+                String type = sel.has("type")    ? sel.get("type").asText()    : "";
+                String date = sel.has("createdAt")? sel.get("createdAt").asText(): "";
+                String read = sel.has("read")     ? (sel.get("read").asBoolean() ? "✅ Okundu" : "🔔 Okunmadı") : "";
+                notifDetailLbl.setText(String.format("📨  %s\n🔖 Tip: %s   |   📅 %s   |   %s\n\n%s", type, type, date, read, msg));
+            }
+        });
+
         HBox bar = btnBar(
-            btn("Yenile", "btn-success", () -> loadNotifications()),
+            btn("Yenile",          "btn-success", this::loadNotifications),
             btn("Okundu İşaretle", "btn-primary", () -> {
                 JsonNode sel = notifTable.getSelectionModel().getSelectedItem();
                 if (sel != null) new Thread(() -> { try { ApiClient.patch("/api/notifications/" + sel.get("id").asText() + "/read"); Platform.runLater(this::loadNotifications); } catch (Exception ex) {} }).start();
             }),
             btn("Sil", "btn-danger", () -> deleteSelected(notifTable, "/api/notifications/", this::loadNotifications))
         );
-        return vbox(bar, notifTable);
+        return vbox(bar, notifTable, notifDetailLbl);
     }
 
     private void loadNotifications() {
@@ -533,5 +693,12 @@ public class CepteFinansApp extends Application {
     }
 
     public static void main(String[] args) { launch(args); }
+
+    @Override
+    public void stop() {
+        if (autoRefreshTask != null) autoRefreshTask.cancel(false);
+        scheduler.shutdownNow();
+        if (gaugeCanvas != null) gaugeCanvas.stop();
+    }
 }
 

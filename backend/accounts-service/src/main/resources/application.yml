@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: accounts-service
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/finanscepte_accounts}
+
+server:
+  port: 8088
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.finanscepte: DEBUG

@@ -49,6 +49,17 @@ public class ApiClient {
         return r.body();
     }
 
+    public static String put(String path, String jsonBody) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + path))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody));
+        if (authToken != null) builder.header("Authorization", "Bearer " + authToken);
+        HttpResponse<String> r = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        checkError(r);
+        return r.body();
+    }
+
     public static void patch(String path) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + path))
