@@ -1,5 +1,7 @@
 package com.finanscepte.desktop;
 
+import com.finanscepte.desktop.ui.FinancialGaugeCanvas;
+import com.finanscepte.desktop.ui.SparklineCanvas;
 import com.finanscepte.desktop.util.ApiClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,6 +42,11 @@ public class CepteFinansApp extends Application {
     private Label totalIncomeLbl, totalExpenseLbl, balanceLbl, budgetStatusLbl, unreadCountLbl;
     private PieChart categoryPie;
     private BarChart<String, Number> monthlyBar;
+
+    // Custom Graphics bileşenleri
+    private FinancialGaugeCanvas gaugeCanvas;
+    private SparklineCanvas incomeSparkline;
+    private SparklineCanvas expenseSparkline;
 
     @Override
     public void start(Stage s) { primaryStage = s; showLogin(); }
@@ -152,7 +159,7 @@ public class CepteFinansApp extends Application {
             cardBox("Bütçe Durumu", budgetStatusLbl, "card-positive")
         );
 
-        // Grafikler
+        // Grafikler (standart JavaFX)
         HBox charts = new HBox(15);
         categoryPie = new PieChart();
         categoryPie.setTitle("Kategori Dağılımı");
@@ -168,7 +175,33 @@ public class CepteFinansApp extends Application {
 
         charts.getChildren().addAll(categoryPie, monthlyBar);
 
-        main.getChildren().addAll(cards, charts);
+        // ── Custom Graphics Satırı ────────────────────────────────────────
+        // FinancialGaugeCanvas: Canvas + GraphicsContext ile çizilen animasyonlu
+        // hız ölçer göstergesi (standart chart kütüphanesi kullanılmamıştır)
+        gaugeCanvas = new FinancialGaugeCanvas();
+
+        // SparklineCanvas: Bezier eğrili mini trend grafiği
+        incomeSparkline  = new SparklineCanvas("Gelir Trendi",  Color.web("#4ecca3"));
+        expenseSparkline = new SparklineCanvas("Gider Trendi", Color.web("#e94560"));
+
+        HBox customRow = new HBox(20);
+        customRow.setAlignment(Pos.CENTER_LEFT);
+
+        // Gauge'ı bir çerçeveye koy
+        VBox gaugeBox = new VBox(4);
+        gaugeBox.setStyle("-fx-background-color: #16213e; -fx-background-radius: 12; -fx-padding: 10;");
+        gaugeBox.getChildren().add(gaugeCanvas);
+
+        // Sparkline'ları dikey sırala
+        VBox sparkBox = new VBox(12);
+        sparkBox.setStyle("-fx-background-color: #16213e; -fx-background-radius: 12; -fx-padding: 10;");
+        Label sparkTitle = new Label("Son İşlem Trendleri");
+        sparkTitle.setStyle("-fx-text-fill: #aaaaaa; -fx-font-size: 12px; -fx-font-weight: bold;");
+        sparkBox.getChildren().addAll(sparkTitle, incomeSparkline, expenseSparkline);
+
+        customRow.getChildren().addAll(gaugeBox, sparkBox);
+
+        main.getChildren().addAll(cards, customRow, charts);
         ScrollPane sp = new ScrollPane(main);
         sp.setFitToWidth(true);
         return sp;
@@ -231,11 +264,23 @@ public class CepteFinansApp extends Application {
                 double finalIncome = income, finalExpense = expense, finalBalance = income - expense;
                 int finalBudgetOver = budgetOver;
 
+                // Sparkline için aylık serileri listele
+                List<Double> incomeValues  = new ArrayList<>(monthlyIncome.values());
+                List<Double> expenseValues = new ArrayList<>(monthlyExpense.values());
+
                 Platform.runLater(() -> {
                     totalIncomeLbl.setText(tl.format(finalIncome));
                     totalExpenseLbl.setText(tl.format(finalExpense));
                     balanceLbl.setText(tl.format(finalBalance));
                     budgetStatusLbl.setText(finalBudgetOver > 0 ? "⚠ " + finalBudgetOver + " aşıldı" : "✓ Tümü limit içinde");
+
+                    // ── Custom Graphics güncellemeleri ─────────────────────
+                    // Gauge: gelir/gider oranını animate et
+                    gaugeCanvas.update(finalIncome, finalExpense);
+
+                    // Sparkline: aylık trend verilerini aktar
+                    if (!incomeValues.isEmpty())  incomeSparkline.setData(incomeValues);
+                    if (!expenseValues.isEmpty()) expenseSparkline.setData(expenseValues);
 
                     // Pasta grafik
                     categoryPie.getData().clear();
@@ -489,3 +534,4 @@ public class CepteFinansApp extends Application {
 
     public static void main(String[] args) { launch(args); }
 }
+
