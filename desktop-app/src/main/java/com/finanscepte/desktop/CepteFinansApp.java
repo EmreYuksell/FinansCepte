@@ -297,11 +297,13 @@ public class CepteFinansApp extends Application {
         return "/api/" + resource;
     }
 
-    private void fillUserId(TextField userId) {
-        if (ApiClient.currentUserId != null && !ApiClient.currentUserId.isBlank()) {
-            userId.setText(ApiClient.currentUserId);
-            userId.setEditable(false);
+    /** Giriş yapan kullanıcının kimliği; formlarda userId alanı gösterilmez. */
+    private String requireCurrentUserId() {
+        if (ApiClient.currentUserId == null || ApiClient.currentUserId.isBlank()) {
+            new Alert(Alert.AlertType.WARNING, "Oturum bulunamadı. Lütfen tekrar giriş yapın.").show();
+            return null;
         }
+        return ApiClient.currentUserId;
     }
 
     private void showApiError(String action, Exception ex) {
@@ -879,8 +881,6 @@ public class CepteFinansApp extends Application {
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
 
-        TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
-        fillUserId(userId);
         TextField amount = new TextField(); amount.setPromptText("0,00"); amount.getStyleClass().add("text-field");
         ComboBox<String> typeCb = new ComboBox<>(FXCollections.observableArrayList("GELIR", "GIDER")); typeCb.setValue("GELIR"); typeCb.getStyleClass().add("combo-box");
         TextField desc = new TextField(); desc.setPromptText("Açıklama / Kategori"); desc.getStyleClass().add("text-field");
@@ -888,24 +888,24 @@ public class CepteFinansApp extends Application {
         TextField tags = new TextField(); tags.setPromptText("Etiketler (virgülle)"); tags.getStyleClass().add("text-field");
 
         if(existing != null) {
-            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             amount.setText(existing.get("amount").asText());
             typeCb.setValue(existing.get("type").asText());
             desc.setText(existing.has("description") ? existing.get("description").asText() : "");
         }
 
-        g.add(newLabel("Kullanıcı"), 0, 0); g.add(userId, 1, 0);
-        g.add(newLabel("Tutar"), 0, 1); g.add(amount, 1, 1);
-        g.add(newLabel("Tür"), 0, 2); g.add(typeCb, 1, 2);
-        g.add(newLabel("Açıklama"), 0, 3); g.add(desc, 1, 3);
-        g.add(newLabel("Tarih"), 0, 4); g.add(date, 1, 4);
-        g.add(newLabel("Etiketler"), 0, 5); g.add(tags, 1, 5);
+        g.add(newLabel("Tutar"), 0, 0); g.add(amount, 1, 0);
+        g.add(newLabel("Tür"), 0, 1); g.add(typeCb, 1, 1);
+        g.add(newLabel("Açıklama"), 0, 2); g.add(desc, 1, 2);
+        g.add(newLabel("Tarih"), 0, 3); g.add(date, 1, 3);
+        g.add(newLabel("Etiketler"), 0, 4); g.add(tags, 1, 4);
 
         Button save = new Button("💾 Kaydet"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
+            String uid = requireCurrentUserId();
+            if (uid == null) return;
             try {
                 ObjectNode body = mapper.createObjectNode();
-                body.put("userId", userId.getText().trim());
+                body.put("userId", uid);
                 body.put("amount", new java.math.BigDecimal(amount.getText().trim().replace(",", ".")));
                 body.put("type", typeCb.getValue());
                 body.put("description", desc.getText().trim());
@@ -928,7 +928,7 @@ public class CepteFinansApp extends Application {
         Label dialogTitle = newLabel("İşlem Bilgileri");
         dialogTitle.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #4f46e5;");
         root.getChildren().addAll(dialogTitle, g, btns);
-        d.setScene(new Scene(root, 460, 420)); d.show();
+        d.setScene(new Scene(root, 460, 380)); d.show();
     }
 
     private void exportTransactionsCsv() {
@@ -1055,31 +1055,29 @@ public class CepteFinansApp extends Application {
         Stage d = dialogStage(existing != null ? "Bütçe Düzenle" : "Yeni Bütçe");
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
-        TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
-        fillUserId(userId);
         TextField cat = new TextField(); cat.setPromptText("Kategori"); cat.getStyleClass().add("text-field");
         TextField limit = new TextField(); limit.setPromptText("Limit"); limit.getStyleClass().add("text-field");
         TextField month = new TextField(); month.setPromptText("Ay (1-12)"); month.getStyleClass().add("text-field");
         TextField year = new TextField(); year.setPromptText("Yıl"); year.getStyleClass().add("text-field");
 
         if (existing != null) {
-            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             cat.setText(existing.has("category") ? existing.get("category").asText() : "");
             limit.setText(existing.has("limitAmount") ? existing.get("limitAmount").asText() : "");
             month.setText(existing.has("month") ? existing.get("month").asText() : "");
             year.setText(existing.has("year") ? existing.get("year").asText() : "");
         }
 
-        g.add(newLabel("Kullanıcı"), 0, 0); g.add(userId, 1, 0);
-        g.add(newLabel("Kategori"), 0, 1); g.add(cat, 1, 1);
-        g.add(newLabel("Limit"), 0, 2); g.add(limit, 1, 2);
-        g.add(newLabel("Ay"), 0, 3); g.add(month, 1, 3);
-        g.add(newLabel("Yıl"), 0, 4); g.add(year, 1, 4);
+        g.add(newLabel("Kategori"), 0, 0); g.add(cat, 1, 0);
+        g.add(newLabel("Limit"), 0, 1); g.add(limit, 1, 1);
+        g.add(newLabel("Ay"), 0, 2); g.add(month, 1, 2);
+        g.add(newLabel("Yıl"), 0, 3); g.add(year, 1, 3);
 
         Button save = new Button("💾 Kaydet"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
+            String uid = requireCurrentUserId();
+            if (uid == null) return;
             try { String json = String.format("{\"userId\":\"%s\",\"category\":\"%s\",\"limitAmount\":%s,\"month\":%s,\"year\":%s}",
-                userId.getText(), cat.getText(), limit.getText(), month.getText(), year.getText());
+                uid, cat.getText(), limit.getText(), month.getText(), year.getText());
                 if (existing != null) {
                     ApiClient.put("/api/budgets/" + existing.get("id").asText(), json);
                 } else {
@@ -1093,7 +1091,7 @@ public class CepteFinansApp extends Application {
         Label dialogTitle2 = newLabel("Bütçe Bilgileri");
         dialogTitle2.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #4f46e5;");
         root.getChildren().addAll(dialogTitle2, g, btns);
-        d.setScene(new Scene(root, 440, 380)); d.show();
+        d.setScene(new Scene(root, 440, 340)); d.show();
     }
 
     // ================ ACCOUNTS ================
@@ -1240,8 +1238,6 @@ public class CepteFinansApp extends Application {
         Stage d = dialogStage(existing != null ? "Hesap Düzenle" : "Yeni Hesap");
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
-        TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
-        fillUserId(userId);
         TextField name = new TextField(); name.setPromptText("Hesap adı"); name.getStyleClass().add("text-field");
         ComboBox<String> type = new ComboBox<>(FXCollections.observableArrayList("VADESIZ", "BIRIKIM", "YATIRIM", "KREDI_KARTI"));
         type.setValue("VADESIZ"); type.getStyleClass().add("combo-box");
@@ -1250,7 +1246,6 @@ public class CepteFinansApp extends Application {
         TextField currency = new TextField(); currency.setPromptText("TRY"); currency.setText("TRY"); currency.getStyleClass().add("text-field");
 
         if (existing != null) {
-            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             name.setText(existing.has("name") ? existing.get("name").asText() : "");
             type.setValue(existing.has("type") ? existing.get("type").asText() : "VADESIZ");
             institution.setText(existing.has("institution") ? existing.get("institution").asText() : "");
@@ -1258,18 +1253,19 @@ public class CepteFinansApp extends Application {
             currency.setText(existing.has("currency") ? existing.get("currency").asText() : "TRY");
         }
 
-        g.add(newLabel("Kullanıcı"), 0, 0); g.add(userId, 1, 0);
-        g.add(newLabel("Hesap Adı"), 0, 1); g.add(name, 1, 1);
-        g.add(newLabel("Tür"), 0, 2); g.add(type, 1, 2);
-        g.add(newLabel("Kurum"), 0, 3); g.add(institution, 1, 3);
-        g.add(newLabel("Bakiye"), 0, 4); g.add(balance, 1, 4);
-        g.add(newLabel("Para Birimi"), 0, 5); g.add(currency, 1, 5);
+        g.add(newLabel("Hesap Adı"), 0, 0); g.add(name, 1, 0);
+        g.add(newLabel("Tür"), 0, 1); g.add(type, 1, 1);
+        g.add(newLabel("Kurum"), 0, 2); g.add(institution, 1, 2);
+        g.add(newLabel("Bakiye"), 0, 3); g.add(balance, 1, 3);
+        g.add(newLabel("Para Birimi"), 0, 4); g.add(currency, 1, 4);
 
         Button save = new Button("💾 Kaydet"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
+            String uid = requireCurrentUserId();
+            if (uid == null) return;
             try {
                 String json = String.format("{\"userId\":\"%s\",\"name\":\"%s\",\"type\":\"%s\",\"institution\":\"%s\",\"balance\":%s,\"currency\":\"%s\"}",
-                    userId.getText(), name.getText(), type.getValue(), institution.getText(), balance.getText(), currency.getText());
+                    uid, name.getText(), type.getValue(), institution.getText(), balance.getText(), currency.getText());
                 if (existing != null) ApiClient.put("/api/accounts/" + existing.get("id").asText(), json);
                 else ApiClient.post("/api/accounts", json);
                 d.close(); loadAccounts();
@@ -1285,8 +1281,6 @@ public class CepteFinansApp extends Application {
         Stage d = dialogStage(existing != null ? "Varlık Düzenle" : "Yeni Varlık");
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
-        TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
-        fillUserId(userId);
         TextField name = new TextField(); name.setPromptText("Varlık adı"); name.getStyleClass().add("text-field");
         ComboBox<String> type = new ComboBox<>(FXCollections.observableArrayList("HISSE", "KRIPTO", "ALTIN", "DOVIZ", "DIGER"));
         type.setValue("HISSE"); type.getStyleClass().add("combo-box");
@@ -1296,7 +1290,6 @@ public class CepteFinansApp extends Application {
         TextField currency = new TextField(); currency.setPromptText("TRY"); currency.setText("TRY"); currency.getStyleClass().add("text-field");
 
         if (existing != null) {
-            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             name.setText(existing.has("name") ? existing.get("name").asText() : "");
             type.setValue(existing.has("type") ? existing.get("type").asText() : "HISSE");
             curVal.setText(existing.has("currentValue") ? existing.get("currentValue").asText() : "");
@@ -1305,19 +1298,20 @@ public class CepteFinansApp extends Application {
             currency.setText(existing.has("currency") ? existing.get("currency").asText() : "TRY");
         }
 
-        g.add(newLabel("Kullanıcı"), 0, 0); g.add(userId, 1, 0);
-        g.add(newLabel("Varlık Adı"), 0, 1); g.add(name, 1, 1);
-        g.add(newLabel("Tür"), 0, 2); g.add(type, 1, 2);
-        g.add(newLabel("Anlık Değer"), 0, 3); g.add(curVal, 1, 3);
-        g.add(newLabel("Alış Fiyatı"), 0, 4); g.add(purVal, 1, 4);
-        g.add(newLabel("Miktar"), 0, 5); g.add(qty, 1, 5);
-        g.add(newLabel("Para Birimi"), 0, 6); g.add(currency, 1, 6);
+        g.add(newLabel("Varlık Adı"), 0, 0); g.add(name, 1, 0);
+        g.add(newLabel("Tür"), 0, 1); g.add(type, 1, 1);
+        g.add(newLabel("Anlık Değer"), 0, 2); g.add(curVal, 1, 2);
+        g.add(newLabel("Alış Fiyatı"), 0, 3); g.add(purVal, 1, 3);
+        g.add(newLabel("Miktar"), 0, 4); g.add(qty, 1, 4);
+        g.add(newLabel("Para Birimi"), 0, 5); g.add(currency, 1, 5);
 
         Button save = new Button("💾 Kaydet"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
+            String uid = requireCurrentUserId();
+            if (uid == null) return;
             try {
                 String json = String.format("{\"userId\":\"%s\",\"name\":\"%s\",\"type\":\"%s\",\"currentValue\":%s,\"purchaseValue\":%s,\"quantity\":%s,\"currency\":\"%s\"}",
-                    userId.getText(), name.getText(), type.getValue(), curVal.getText(), purVal.getText(), qty.getText(), currency.getText());
+                    uid, name.getText(), type.getValue(), curVal.getText(), purVal.getText(), qty.getText(), currency.getText());
                 if (existing != null) ApiClient.put("/api/assets/" + existing.get("id").asText(), json);
                 else ApiClient.post("/api/assets", json);
                 d.close(); loadAssets();
@@ -1488,8 +1482,6 @@ public class CepteFinansApp extends Application {
         Stage d = dialogStage(existing != null ? "Hedef Düzenle" : "Yeni Hedef");
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
-        TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
-        fillUserId(userId);
         TextField name = new TextField(); name.setPromptText("Hedef adı"); name.getStyleClass().add("text-field");
         TextField target = new TextField(); target.setPromptText("Hedef tutar"); target.getStyleClass().add("text-field");
         TextField current = new TextField(); current.setPromptText("Mevcut birikim"); current.getStyleClass().add("text-field");
@@ -1499,7 +1491,6 @@ public class CepteFinansApp extends Application {
         TextField category = new TextField(); category.setPromptText("Kategori"); category.getStyleClass().add("text-field");
 
         if (existing != null) {
-            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             name.setText(existing.has("name") ? existing.get("name").asText() : "");
             target.setText(existing.has("targetAmount") ? existing.get("targetAmount").asText() : "");
             current.setText(existing.has("currentAmount") ? existing.get("currentAmount").asText() : "");
@@ -1508,19 +1499,20 @@ public class CepteFinansApp extends Application {
             if (existing.has("category")) category.setText(existing.get("category").asText());
         }
 
-        g.add(newLabel("Kullanıcı"), 0, 0); g.add(userId, 1, 0);
-        g.add(newLabel("Hedef Adı"), 0, 1); g.add(name, 1, 1);
-        g.add(newLabel("Hedef Tutar"), 0, 2); g.add(target, 1, 2);
-        g.add(newLabel("Mevcut Birikim"), 0, 3); g.add(current, 1, 3);
-        g.add(newLabel("Bitiş Tarihi"), 0, 4); g.add(deadline, 1, 4);
-        g.add(newLabel("Renk"), 0, 5); g.add(color, 1, 5);
-        g.add(newLabel("Kategori"), 0, 6); g.add(category, 1, 6);
+        g.add(newLabel("Hedef Adı"), 0, 0); g.add(name, 1, 0);
+        g.add(newLabel("Hedef Tutar"), 0, 1); g.add(target, 1, 1);
+        g.add(newLabel("Mevcut Birikim"), 0, 2); g.add(current, 1, 2);
+        g.add(newLabel("Bitiş Tarihi"), 0, 3); g.add(deadline, 1, 3);
+        g.add(newLabel("Renk"), 0, 4); g.add(color, 1, 4);
+        g.add(newLabel("Kategori"), 0, 5); g.add(category, 1, 5);
 
         Button save = new Button("💾 Kaydet"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
+            String uid = requireCurrentUserId();
+            if (uid == null) return;
             try {
                 String json = String.format("{\"userId\":\"%s\",\"name\":\"%s\",\"targetAmount\":%s,\"currentAmount\":%s,\"deadline\":\"%s\",\"color\":\"%s\",\"category\":\"%s\"}",
-                    userId.getText(), name.getText(), target.getText(), current.getText(), deadline.getValue(), color.getValue(), category.getText());
+                    uid, name.getText(), target.getText(), current.getText(), deadline.getValue(), color.getValue(), category.getText());
                 if (existing != null) ApiClient.put("/api/goals/" + existing.get("id").asText(), json);
                 else ApiClient.post("/api/goals", json);
                 d.close(); showPage("goals");
@@ -1792,19 +1784,19 @@ public class CepteFinansApp extends Application {
         Stage d = dialogStage("Yeni Fiyat Alarmı");
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
-        TextField userId = new TextField(ApiClient.currentUserId != null ? ApiClient.currentUserId : ""); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
         TextField symbol = new TextField(); symbol.setPromptText("Sembol (örn. BTC)"); symbol.getStyleClass().add("text-field");
         TextField target = new TextField(); target.setPromptText("Hedef fiyat"); target.getStyleClass().add("text-field");
         ComboBox<String> cond = new ComboBox<>(FXCollections.observableArrayList("ABOVE", "BELOW")); cond.setValue("ABOVE"); cond.getStyleClass().add("combo-box");
-        g.add(newLabel("Kullanıcı"), 0, 0); g.add(userId, 1, 0);
-        g.add(newLabel("Sembol"), 0, 1); g.add(symbol, 1, 1);
-        g.add(newLabel("Hedef Fiyat"), 0, 2); g.add(target, 1, 2);
-        g.add(newLabel("Koşul"), 0, 3); g.add(cond, 1, 3);
+        g.add(newLabel("Sembol"), 0, 0); g.add(symbol, 1, 0);
+        g.add(newLabel("Hedef Fiyat"), 0, 1); g.add(target, 1, 1);
+        g.add(newLabel("Koşul"), 0, 2); g.add(cond, 1, 2);
         Button save = new Button("💾 Kaydet"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
+            String uid = requireCurrentUserId();
+            if (uid == null) return;
             try {
                 String json = String.format("{\"userId\":\"%s\",\"symbol\":\"%s\",\"targetPrice\":%s,\"condition\":\"%s\"}",
-                    userId.getText(), symbol.getText(), target.getText(), cond.getValue());
+                    uid, symbol.getText(), target.getText(), cond.getValue());
                 ApiClient.post("/api/currency/alerts", json); d.close(); showPage("currency");
             } catch (Exception ex) {}
         });
