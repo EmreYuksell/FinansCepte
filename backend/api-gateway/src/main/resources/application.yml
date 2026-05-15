@@ -35,6 +35,22 @@ spring:
           uri: http://report-service:8087
           predicates:
             - Path=/api/reports/**
+        - id: accounts-service
+          uri: http://accounts-service:8088
+          predicates:
+            - Path=/api/accounts/**,/api/assets/**
+        - id: goals-service
+          uri: http://goals-service:8089
+          predicates:
+            - Path=/api/goals/**
+        - id: currency-service
+          uri: http://currency-service:8090
+          predicates:
+            - Path=/api/currency/**
+        - id: settings-service
+          uri: http://settings-service:8091
+          predicates:
+            - Path=/api/settings/**
 
 management:
   endpoints:

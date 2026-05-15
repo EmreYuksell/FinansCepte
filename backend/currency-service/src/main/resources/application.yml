@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: currency-service
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/finanscepte_currency}
+
+server:
+  port: 8090
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.finanscepte: DEBUG

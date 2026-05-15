@@ -137,6 +137,74 @@ services:
     networks:
       - financescepte-network
 
+  accounts-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: accounts-service
+    container_name: accounts-service
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_accounts
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  goals-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: goals-service
+    container_name: goals-service
+    ports:
+      - "8089:8089"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_goals
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  currency-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: currency-service
+    container_name: currency-service
+    ports:
+      - "8090:8090"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_currency
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
+  settings-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: settings-service
+    container_name: settings-service
+    ports:
+      - "8091:8091"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_settings
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financescepte-network
+
   api-gateway:
     build:
       context: ./backend
@@ -154,6 +222,10 @@ services:
       - budget-service
       - notification-service
       - report-service
+      - accounts-service
+      - goals-service
+      - currency-service
+      - settings-service
     networks:
       - financescepte-network
 

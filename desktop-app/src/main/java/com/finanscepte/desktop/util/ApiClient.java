@@ -11,13 +11,15 @@ import java.net.http.HttpResponse;
 
 public class ApiClient {
 
-    private static final String BASE_URL = "http://localhost:8080";
+    public static final String BASE_URL = "http://localhost:8080";
     private static final HttpClient httpClient = HttpClient.newHttpClient();
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private static String authToken;
+
+    public static String currentUserId;
 
     public static void setAuthToken(String token) { authToken = token; }
 
@@ -67,6 +69,22 @@ public class ApiClient {
         if (authToken != null) builder.header("Authorization", "Bearer " + authToken);
         HttpResponse<String> r = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         checkError(r);
+    }
+
+    public static byte[] getBytes(String path) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + path)).GET();
+        if (authToken != null) builder.header("Authorization", "Bearer " + authToken);
+        HttpResponse<byte[]> r = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+        checkErrorBytes(r);
+        return r.body();
+    }
+
+    private static void checkErrorBytes(HttpResponse<byte[]> r) throws Exception {
+        int code = r.statusCode();
+        if (code >= 400) {
+            throw new RuntimeException("HTTP " + code);
+        }
     }
 
     private static void checkError(HttpResponse<String> r) throws Exception {

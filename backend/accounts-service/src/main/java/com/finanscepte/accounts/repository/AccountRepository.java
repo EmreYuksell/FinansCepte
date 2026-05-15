@@ -1,7 +1,7 @@
 package com.finanscepte.accounts.repository;
 
 import com.finanscepte.accounts.model.Account;
-import com.finanscepte.common.repository.GenericRepository;
+import com.finanscepte.common.GenericRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;

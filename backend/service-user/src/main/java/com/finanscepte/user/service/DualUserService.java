@@ -1,6 +1,7 @@
 package com.finanscepte.user.service;
 
 import com.finanscepte.common.exception.ResourceNotFoundException;
+import com.finanscepte.user.dto.LoginRequest;
 import com.finanscepte.user.dto.UserRequest;
 import com.finanscepte.user.dto.UserResponse;
 import com.finanscepte.user.model.User;
@@ -9,6 +10,7 @@ import com.finanscepte.user.repository.UserJpaRepository;
 import com.finanscepte.user.repository.UserMongoRepository;
 import com.finanscepte.user.util.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -27,17 +29,20 @@ public class DualUserService implements UserService {
     @Autowired
     private UserMapper userMapper;
 
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     private boolean isJpaMode() {
         return userJpaRepository != null;
     }
 
     @Override
     public UserResponse createUser(UserRequest request) {
+        String hashedPassword = passwordEncoder.encode(request.password());
         if (isJpaMode()) {
             UserJpaEntity entity = UserJpaEntity.builder()
                     .name(request.name())
                     .email(request.email())
-                    .password(request.password())
+                    .password(hashedPassword)
                     .createdAt(LocalDateTime.now())
                     .updatedAt(LocalDateTime.now())
                     .build();
@@ -51,6 +56,7 @@ public class DualUserService implements UserService {
             );
         } else {
             User user = userMapper.toEntity(request);
+            user.setPassword(hashedPassword);
             User saved = userMongoRepository.save(user);
             return userMapper.toResponse(saved);
         }
@@ -71,6 +77,31 @@ public class DualUserService implements UserService {
         } else {
             User user = userMongoRepository.findByEmail(email)
                     .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
+            return userMapper.toResponse(user);
+        }
+    }
+
+    @Override
+    public UserResponse login(LoginRequest request) {
+        if (isJpaMode()) {
+            UserJpaEntity entity = userJpaRepository.findByEmail(request.email())
+                    .orElseThrow(() -> new RuntimeException("E-posta veya şifre hatalı"));
+            if (!passwordEncoder.matches(request.password(), entity.getPassword())) {
+                throw new RuntimeException("E-posta veya şifre hatalı");
+            }
+            return new UserResponse(
+                    entity.getId().toString(),
+                    entity.getName(),
+                    entity.getEmail(),
+                    entity.getCreatedAt(),
+                    entity.getUpdatedAt()
+            );
+        } else {
+            User user = userMongoRepository.findByEmail(request.email())
+                    .orElseThrow(() -> new RuntimeException("E-posta veya şifre hatalı"));
+            if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+                throw new RuntimeException("E-posta veya şifre hatalı");
+            }
             return userMapper.toResponse(user);
         }
     }

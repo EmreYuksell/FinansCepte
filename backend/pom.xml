@@ -22,6 +22,10 @@
         <module>budget-service</module>
         <module>notification-service</module>
         <module>report-service</module>
+        <module>accounts-service</module>
+        <module>goals-service</module>
+        <module>currency-service</module>
+        <module>settings-service</module>
     </modules>
 
     <properties>

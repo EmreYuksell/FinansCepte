@@ -1,5 +1,6 @@
 package com.finanscepte.user.controller;
 
+import com.finanscepte.user.dto.LoginRequest;
 import com.finanscepte.user.dto.UserRequest;
 import com.finanscepte.user.dto.UserResponse;
 import com.finanscepte.user.service.UserService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -55,5 +57,20 @@ public class UserController {
     public ResponseEntity<Void> delete(@PathVariable String id) {
         userService.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        try {
+            UserResponse user = userService.login(request);
+            return ResponseEntity.ok(Map.of(
+                    "id", user.id(),
+                    "name", user.name(),
+                    "email", user.email()
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 }

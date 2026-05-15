@@ -4,17 +4,14 @@ import com.finanscepte.report.dto.ReportRequest;
 import com.finanscepte.report.dto.ReportResponse;
 import com.finanscepte.report.service.ReportService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -50,5 +47,34 @@ public class ReportController {
     public ResponseEntity<Void> delete(@PathVariable String id) {
         reportService.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Object>> summary(@RequestParam String period) {
+        return ResponseEntity.ok(reportService.getSummary(period));
+    }
+
+    @GetMapping("/trend")
+    public ResponseEntity<List<Map<String, Object>>> trend(@RequestParam String period) {
+        return ResponseEntity.ok(reportService.getTrend(period));
+    }
+
+    @GetMapping("/category")
+    public ResponseEntity<List<Map<String, Object>>> category(@RequestParam String period) {
+        return ResponseEntity.ok(reportService.getCategoryBreakdown(period));
+    }
+
+    @GetMapping("/insights")
+    public ResponseEntity<List<String>> insights() {
+        return ResponseEntity.ok(reportService.getInsights());
+    }
+
+    @GetMapping("/export/pdf")
+    public ResponseEntity<byte[]> exportPdf(@RequestParam String period, @RequestParam String userId) {
+        byte[] pdf = reportService.exportPdf(period, userId);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("filename", "ceptefinans-rapor.pdf");
+        return ResponseEntity.ok().headers(headers).body(pdf);
     }
 }
