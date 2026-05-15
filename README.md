@@ -4,7 +4,7 @@ TBL324 - İleri Java Uygulamaları Dersi Projesi
 
 ## Proje özeti
 
-**CepteFinans**, günlük finansı tek noktada toplamak için geliştirilmiş bir kişisel finans platformudur. Kullanıcı; işlem, bütçe ve abonelik takibinin yanı sıra hesap ve varlık yönetimi, tasarruf hedefleri, grafik raporları, döviz ve kripto kurları, bildirimler ve kişisel ayarlar için JavaFX masaüstü istemcisini kullanır. Tüm özellikler, **Spring Cloud Gateway** arkasındaki küçük ve odaklı **Spring Boot mikroservisleri** üzerinden **REST API** ile sunulur; kalıcı veri **MongoDB** ile saklanır. Ders kapsamında JDBC/JPA ile ilişkisel örnek olarak aynı kullanıcı alanının **H2 üzerinden `service-user-jpa`** ile çalışan varyantı da Docker içinde gösterilir; canlı masaüstü ve gateway akışında varsayılan kimlik doğrulama ise **MongoDB tabanlı `service-user`** ile yapılır.
+**CepteFinans**, günlük finansı tek noktada toplamak için geliştirilmiş bir kişisel finans platformudur. Kullanıcı; işlem, bütçe ve abonelik takibinin yanı sıra hesap ve varlık yönetimi, tasarruf hedefleri, grafik raporları, döviz ve kripto kurları, bildirimler ve kişisel ayarlar için JavaFX masaüstü istemcisini kullanır. Tüm özellikler, **Spring Cloud Gateway** arkasındaki küçük ve odaklı **Spring Boot mikroservisleri** üzerinden **REST API** ile sunulur; kalıcı veri **MongoDB** ile saklanır. Ders kapsamında JDBC/JPA ile ilişkisel örnek olarak aynı kullanıcı alanının **H2 üzerinden `service-user-jpa`** ile çalışan varyantı da Docker içinde gösterilir; canlı masaüstü ve gateway akışında varsayılan kimlik doğrulama **MongoDB tabanlı `service-user`** ile yapılır.
 
 Proje; **generic repository ve servis soyutlamaları**, **Observer**, **Strategy** ve **Template Method** gibi tasarım kalıpları, **Swagger/OpenAPI** ile API sözleşmesi, **Docker Compose** ile çok konteynerli çalıştırma, **birim ve entegrasyon testleri** (JUnit, Mockito, Testcontainers) ve **k6** ile yük testi altyapısı içerir.
 
@@ -26,7 +26,7 @@ Proje; **generic repository ve servis soyutlamaları**, **Observer**, **Strategy
 - **PowerShell** (`seed.ps1` için; isteğe bağlı)
 - **k6** (performans testi bölümü için; isteğe bağlı)
 
-**Docker notu:** `backend/Dockerfile` imaj oluştururken ilgili modülün `target/*.jar` dosyasını kopyalar. `docker compose build` / `up` öncesi mutlaka `cd backend && mvn package -DskipTests` (veya testlerle birlikte) çalıştırın; aksi halde `target` klasörü boş olduğundan derleme hata verir.
+**Docker:** `backend/Dockerfile` çok aşamalıdır; imaj içinde Maven ile modül derlenir. İsterseniz önce `cd backend && mvn package -DskipTests` ile yerel JAR da üretebilirsiniz. Tam yığın: `docker compose up -d --build`.
 
 ## Mimari
 
@@ -107,11 +107,11 @@ graph TB
 ## Kurulum
 
 ```bash
-# 1. JAR'ları oluştur
+# 1. (İsteğe bağlı) Yerel derleme ve test
 cd backend && mvn package -DskipTests
 
-# 2. Docker Compose ile tüm sistemi başlat
-docker compose up -d
+# 2. Docker ile tüm sistemi başlat (imaj içinde de derlenir)
+docker compose up -d --build
 
 # Kullanıcı servisi iki profilde çalışır:
 # - service-user (8081): MongoDB — gateway ve desktop bu adresi kullanır
@@ -167,12 +167,35 @@ k6 run k6/load-test.js
 
 ## Hata Yönetimi
 
+Tüm mikroservisler `common-lib` içindeki `GlobalExceptionHandler` ile standart `ApiErrorResponse` gövdesi döner (`timestamp`, `status`, `error`, `message`, `path`).
+
 | HTTP Kodu | Durum |
 |-----------|-------|
 | 200 | Başarılı |
 | 201 | Oluşturuldu |
 | 204 | Silindi |
-| 400 | Validasyon hatası / Geçersiz argüman |
-| 401 | Yetkisiz (yanlış şifre) |
+| 400 | Validasyon hatası / Geçersiz argüman / bozuk JSON |
+| 401 | Yetkisiz (`UnauthorizedException`, örn. hatalı giriş) |
 | 404 | Kaynak bulunamadı |
 | 500 | Sunucu hatası |
+
+## Değerlendirme Kriterleri (TBL324)
+
+| Kriter | Puan | Durum | Karşılık |
+|--------|------|-------|----------|
+| API & Back-end | 10 | ✓ | 12 mikroservis + REST |
+| Generic Yapılar | 10 | ✓ | `GenericRepository<T,ID>`, `AbstractGenericDtoService` |
+| Custom GUI | 10 | ✓ | JavaFX + `FinancialGaugeCanvas` (Canvas API) |
+| JDBC & NoSQL | 10 | ✓ | MongoDB + `service-user-jpa` (H2/JDBC) |
+| SOLID & OOP | 10 | ✓ | Kalıplar + SOLID tablosu (aşağıda) |
+| Hata Yönetimi | 5 | ✓ | 4xx/5xx + `ApiErrorResponse` |
+| Performans Testleri | 5 | ✓ | k6 (`k6/load-test.js`) |
+| Analiz & Doküman | 5 | ✓ | README, Mermaid, Swagger |
+| **Zorunlu toplam** | **65** | ✓ | |
+| Mikroservis Mimarisi | +10 | ✓ | JSON/REST, izole servisler |
+| Gateway | +5 | ✓ | Spring Cloud Gateway |
+| Mobil GUI | +5 | — | **Kapsam dışı** (bilinçli olarak yok) |
+| Test-Driven Geliştirme | +10 | ✓ | JUnit/Mockito/WebMvcTest + servis testleri |
+| Dockerize Sistem | +5 | ✓ | `docker compose up -d --build` |
+| **Ek özellikler (mobil hariç)** | **+30** | ✓ | |
+| **Genel toplam (mobil hariç)** | **95** | | |
