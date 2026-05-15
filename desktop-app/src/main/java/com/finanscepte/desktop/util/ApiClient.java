@@ -91,9 +91,15 @@ public class ApiClient {
         int code = r.statusCode();
         if (code >= 400) {
             String body = r.body();
+            if (body == null || body.isBlank()) {
+                throw new RuntimeException("HTTP " + code + ": Sunucu hatası (boş cevap)");
+            }
             try {
                 var err = objectMapper.readTree(body);
-                String msg = err.has("message") ? err.get("message").asText() : body;
+                String msg = null;
+                if (err.has("message")) msg = err.get("message").asText();
+                else if (err.has("error")) msg = err.get("error").asText();
+                if (msg == null || msg.isBlank()) msg = body;
                 throw new RuntimeException("HTTP " + code + ": " + msg);
             } catch (RuntimeException re) { throw re; }
               catch (Exception e) {

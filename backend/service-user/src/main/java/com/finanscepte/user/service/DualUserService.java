@@ -32,7 +32,7 @@ public class DualUserService implements UserService {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private boolean isJpaMode() {
-        return userJpaRepository != null;
+        return userMongoRepository == null && userJpaRepository != null;
     }
 
     @Override

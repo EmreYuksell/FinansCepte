@@ -120,7 +120,9 @@ public class CepteFinansApp extends Application {
                     ApiClient.currentUserId = uid;
                     Platform.runLater(() -> showMain(uid, uname));
                 } catch (Exception ex) {
-                    Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, "Giriş başarısız: " + ex.getMessage()).show());
+                    String err = ex.getMessage();
+                    if (err == null || err.isBlank() || err.equals("null")) err = "Bilinmeyen bir hata oluştu. Backend bağlantısını veya şifrenizi kontrol edin.";
+                    Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, "Giriş başarısız: " + err).show());
                 }
             }).start();
         });
