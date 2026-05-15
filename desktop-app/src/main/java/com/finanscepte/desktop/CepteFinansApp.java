@@ -292,9 +292,27 @@ public class CepteFinansApp extends Application {
 
     private String userListPath(String resource) {
         if (ApiClient.currentUserId != null && !ApiClient.currentUserId.isBlank()) {
+            if ("budgets".equals(resource)) {
+                return "/api/budgets/user/" + ApiClient.currentUserId + "/all";
+            }
             return "/api/" + resource + "/user/" + ApiClient.currentUserId;
         }
         return "/api/" + resource;
+    }
+
+    private String transactionMonthKey(JsonNode t) {
+        if (t == null || !t.has("createdAt") || t.get("createdAt").isNull()) {
+            return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        }
+        JsonNode createdAt = t.get("createdAt");
+        if (createdAt.isTextual()) {
+            String s = createdAt.asText();
+            return s.length() >= 7 ? s.substring(0, 7) : s;
+        }
+        if (createdAt.isArray() && createdAt.size() >= 2) {
+            return String.format("%04d-%02d", createdAt.get(0).asInt(), createdAt.get(1).asInt());
+        }
+        return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
     }
 
     /** Giriş yapan kullanıcının kimliği; formlarda userId alanı gösterilmez. */
@@ -616,11 +634,25 @@ public class CepteFinansApp extends Application {
 
     private void refreshDashboard() {
         new Thread(() -> {
+            JsonNode[] tx = null;
+            JsonNode[] bg = null;
+            JsonNode[] nf = null;
             try {
-                JsonNode[] tx = ApiClient.get(userListPath("transactions"), JsonNode[].class);
-                JsonNode[] bg = ApiClient.get(userListPath("budgets"), JsonNode[].class);
-                JsonNode[] nf = ApiClient.get(userListPath("notifications"), JsonNode[].class);
-
+                tx = ApiClient.getJsonArray(userListPath("transactions"));
+            } catch (Exception ex) {
+                showApiError("İşlemler yüklenemedi", ex);
+            }
+            try {
+                bg = ApiClient.getJsonArray(userListPath("budgets"));
+            } catch (Exception ex) {
+                showApiError("Bütçeler yüklenemedi", ex);
+            }
+            try {
+                nf = ApiClient.getJsonArray(userListPath("notifications"));
+            } catch (Exception ex) {
+                showApiError("Bildirimler yüklenemedi", ex);
+            }
+            try {
                 double income = 0, expense = 0;
                 Map<String, Double> catSpending = new HashMap<>();
                 Map<String, Double> monthlyIncome = new TreeMap<>();
@@ -632,11 +664,13 @@ public class CepteFinansApp extends Application {
                 int dayCount = 0;
                 double prevIncome = 0, prevExpense = 0;
                 if(tx != null) {
-                    recent = Arrays.stream(tx).sorted((a,b) -> b.get("createdAt").asText().compareTo(a.get("createdAt").asText())).limit(5).collect(Collectors.toList());
+                    recent = Arrays.stream(tx)
+                            .sorted((a, b) -> transactionMonthKey(b).compareTo(transactionMonthKey(a)))
+                            .limit(5).collect(Collectors.toList());
                     for (JsonNode t : tx) {
                         double amt = t.get("amount").asDouble();
                         String type = t.get("type").asText();
-                        String month = t.get("createdAt").asText().substring(0, 7);
+                        String month = transactionMonthKey(t);
                         if (type.equalsIgnoreCase("GELIR")) {
                             income += amt; monthlyIncome.merge(month, amt, Double::sum);
                             if (month.equals(prevMonth)) prevIncome += amt;
@@ -658,7 +692,7 @@ public class CepteFinansApp extends Application {
                 List<String> overBudgets = new ArrayList<>();
                 if (bg != null) {
                     for (JsonNode b : bg) {
-                        double spent = b.get("spentAmount").asDouble();
+                        double spent = b.has("spentAmount") ? b.get("spentAmount").asDouble() : 0;
                         double limit = b.get("limitAmount").asDouble();
                         if (spent >= limit) { budgetOver++; overBudgets.add(b.get("category").asText()); }
                     }
@@ -746,7 +780,9 @@ public class CepteFinansApp extends Application {
                     unreadBadge.setText(String.valueOf(unread));
                     unreadBadge.setVisible(unread > 0);
                 });
-            } catch (Exception ex) { Platform.runLater(() -> {}); }
+            } catch (Exception ex) {
+                showApiError("Dashboard güncellenemedi", ex);
+            }
         }).start();
     }
 
@@ -848,7 +884,7 @@ public class CepteFinansApp extends Application {
     private void loadTransactions(String typeFilter, String search, LocalDate from, LocalDate to, Label totalLbl, Label countLbl) {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get(userListPath("transactions"), JsonNode[].class);
+                JsonNode[] d = ApiClient.getJsonArray(userListPath("transactions"));
                 List<JsonNode> list = d != null ? Arrays.asList(d) : new ArrayList<>();
                 if(!"Tümü".equals(typeFilter)) {
                     list = list.stream().filter(n -> n.get("type").asText().equalsIgnoreCase(typeFilter)).collect(Collectors.toList());
@@ -1046,8 +1082,12 @@ public class CepteFinansApp extends Application {
 
     private void loadBudgets() {
         new Thread(() -> {
-            try { JsonNode[] d = ApiClient.get(userListPath("budgets"), JsonNode[].class); Platform.runLater(() -> budgetList.setAll(d != null ? d : new JsonNode[0])); }
-            catch (Exception e) {}
+            try {
+                JsonNode[] d = ApiClient.getJsonArray(userListPath("budgets"));
+                Platform.runLater(() -> budgetList.setAll(d != null ? d : new JsonNode[0]));
+            } catch (Exception e) {
+                showApiError("Bütçeler yüklenemedi", e);
+            }
         }).start();
     }
 
@@ -1065,6 +1105,10 @@ public class CepteFinansApp extends Application {
             limit.setText(existing.has("limitAmount") ? existing.get("limitAmount").asText() : "");
             month.setText(existing.has("month") ? existing.get("month").asText() : "");
             year.setText(existing.has("year") ? existing.get("year").asText() : "");
+        } else {
+            LocalDate now = LocalDate.now();
+            month.setText(String.valueOf(now.getMonthValue()));
+            year.setText(String.valueOf(now.getYear()));
         }
 
         g.add(newLabel("Kategori"), 0, 0); g.add(cat, 1, 0);
@@ -1084,7 +1128,9 @@ public class CepteFinansApp extends Application {
                     ApiClient.post("/api/budgets", json);
                 }
                 d.close(); loadBudgets(); refreshDashboard();
-            } catch (Exception ex) {}
+            } catch (Exception ex) {
+                showApiError("Bütçe kaydedilemedi", ex);
+            }
         });
         Button cancel = new Button("İptal"); cancel.getStyleClass().addAll("btn", "btn-ghost"); cancel.setOnAction(e -> d.close());
         HBox btns = new HBox(10, save, cancel);
@@ -1201,7 +1247,7 @@ public class CepteFinansApp extends Application {
     private void loadAccounts() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get(userListPath("accounts"), JsonNode[].class);
+                JsonNode[] d = ApiClient.getJsonArray(userListPath("accounts"));
                 Platform.runLater(() -> accountList.setAll(d != null ? d : new JsonNode[0]));
             } catch (Exception e) {}
         }).start();
@@ -1210,7 +1256,7 @@ public class CepteFinansApp extends Application {
     private void loadAssets() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get(userListPath("assets"), JsonNode[].class);
+                JsonNode[] d = ApiClient.getJsonArray(userListPath("assets"));
                 Platform.runLater(() -> {
                     assetList.setAll(d != null ? d : new JsonNode[0]);
                     // Update pie chart
@@ -1409,7 +1455,7 @@ public class CepteFinansApp extends Application {
     private void loadGoals(Label totalTargetLbl, Label totalCurrentLbl, Label totalRemainingLbl, Label activeCountLbl, FlowPane goalsPane) {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get(userListPath("goals"), JsonNode[].class);
+                JsonNode[] d = ApiClient.getJsonArray(userListPath("goals"));
                 List<JsonNode> list = d != null ? Arrays.asList(d) : new ArrayList<>();
                 double totalTarget = list.stream().mapToDouble(n -> n.get("targetAmount").asDouble()).sum();
                 double totalCurrent = list.stream().mapToDouble(n -> n.get("currentAmount").asDouble()).sum();
@@ -1604,13 +1650,13 @@ public class CepteFinansApp extends Application {
         new Thread(() -> {
             try {
                 // Trend
-                JsonNode[] trend = ApiClient.get("/api/reports/trend?period=" + period, JsonNode[].class);
+                JsonNode[] trend = ApiClient.getJsonArray("/api/reports/trend?period=" + period);
                 // Category
-                JsonNode[] cats = ApiClient.get("/api/reports/category?period=" + period, JsonNode[].class);
+                JsonNode[] cats = ApiClient.getJsonArray("/api/reports/category?period=" + period);
                 // Summary
                 JsonNode summary = ApiClient.get("/api/reports/summary?period=" + period, JsonNode.class);
                 // Insights
-                JsonNode[] insights = ApiClient.get("/api/reports/insights", JsonNode[].class);
+                JsonNode[] insights = ApiClient.getJsonArray("/api/reports/insights");
 
                 Platform.runLater(() -> {
                     // Line chart
@@ -1749,8 +1795,8 @@ public class CepteFinansApp extends Application {
     private void loadCurrency(HBox cards, TableView<JsonNode> table, VBox alarms) {
         new Thread(() -> {
             try {
-                JsonNode[] rates = ApiClient.get("/api/currency/rates", JsonNode[].class);
-                JsonNode[] alerts = ApiClient.get("/api/currency/alerts?userId=" + ApiClient.currentUserId, JsonNode[].class);
+                JsonNode[] rates = ApiClient.getJsonArray("/api/currency/rates");
+                JsonNode[] alerts = ApiClient.getJsonArray("/api/currency/alerts?userId=" + ApiClient.currentUserId);
                 Platform.runLater(() -> {
                     // Cards
                     cards.getChildren().clear();
@@ -1866,7 +1912,7 @@ public class CepteFinansApp extends Application {
         });
 
         markAll.setOnAction(e -> new Thread(() -> { try {
-            JsonNode[] d = ApiClient.get(userListPath("notifications"), JsonNode[].class);
+            JsonNode[] d = ApiClient.getJsonArray(userListPath("notifications"));
             if(d != null) for(JsonNode n : d) if(!n.get("read").asBoolean()) ApiClient.patch("/api/notifications/" + n.get("id").asText() + "/read");
             Platform.runLater(this::loadNotifications);
         } catch(Exception ex){ showApiError("Bildirimler güncellenemedi", ex); } }).start());
@@ -1881,7 +1927,7 @@ public class CepteFinansApp extends Application {
     private void loadNotifications() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get(userListPath("notifications"), JsonNode[].class);
+                JsonNode[] d = ApiClient.getJsonArray(userListPath("notifications"));
                 Platform.runLater(() -> { notifList.setAll(d != null ? d : new JsonNode[0]); });
                 long unread = d != null ? Arrays.stream(d).filter(n -> !n.get("read").asBoolean()).count() : 0;
                 Platform.runLater(() -> {

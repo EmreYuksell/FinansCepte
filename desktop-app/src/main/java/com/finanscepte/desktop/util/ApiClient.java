@@ -1,6 +1,7 @@
 package com.finanscepte.desktop.util;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -30,6 +31,21 @@ public class ApiClient {
         HttpResponse<String> r = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         checkError(r);
         return objectMapper.readValue(r.body(), responseType);
+    }
+
+    public static JsonNode[] getJsonArray(String path) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + path)).GET();
+        if (authToken != null) builder.header("Authorization", "Bearer " + authToken);
+        HttpResponse<String> r = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        checkError(r);
+        String body = r.body();
+        if (body == null || body.isBlank()) return new JsonNode[0];
+        JsonNode root = objectMapper.readTree(body);
+        if (!root.isArray()) return new JsonNode[0];
+        JsonNode[] arr = new JsonNode[root.size()];
+        for (int i = 0; i < root.size(); i++) arr[i] = root.get(i);
+        return arr;
     }
 
     public static void delete(String path) throws Exception {
