@@ -2,6 +2,32 @@
 
 TBL324 - İleri Java Uygulamaları Dersi Projesi
 
+## Proje özeti
+
+**CepteFinans**, günlük finansı tek noktada toplamak için geliştirilmiş bir kişisel finans platformudur. Kullanıcı; işlem, bütçe ve abonelik takibinin yanı sıra hesap ve varlık yönetimi, tasarruf hedefleri, grafik raporları, döviz ve kripto kurları, bildirimler ve kişisel ayarlar için JavaFX masaüstü istemcisini kullanır. Tüm özellikler, **Spring Cloud Gateway** arkasındaki küçük ve odaklı **Spring Boot mikroservisleri** üzerinden **REST API** ile sunulur; kalıcı veri **MongoDB** ile saklanır. Ders kapsamında JDBC/JPA ile ilişkisel örnek olarak aynı kullanıcı alanının **H2 üzerinden `service-user-jpa`** ile çalışan varyantı da Docker içinde gösterilir; canlı masaüstü ve gateway akışında varsayılan kimlik doğrulama ise **MongoDB tabanlı `service-user`** ile yapılır.
+
+Proje; **generic repository ve servis soyutlamaları**, **Observer**, **Strategy** ve **Template Method** gibi tasarım kalıpları, **Swagger/OpenAPI** ile API sözleşmesi, **Docker Compose** ile çok konteynerli çalıştırma, **birim ve entegrasyon testleri** (JUnit, Mockito, Testcontainers) ve **k6** ile yük testi altyapısı içerir.
+
+## Depo yapısı
+
+| Yol | İçerik |
+|-----|--------|
+| `backend/` | Maven üst POM, `common-lib`, `api-gateway`, alan mikroservisleri (`service-user`, `service-product`, …) |
+| `desktop-app/` | JavaFX masaüstü istemci (HttpClient, Jackson) |
+| `docker-compose.yml` | MongoDB, gateway, mikroservis konteynerleri |
+| `k6/` | Yük testi betikleri ve isteğe bağlı JSON çıktı |
+| `seed.ps1` | Demo veri yükleme (PowerShell) |
+| `scripts/` | Yardımcı otomasyon (ör. ODT/rapor betikleri) |
+
+## Ön gereksinimler
+
+- **JDK 17** ve **Maven 3.9+**
+- **Docker** ve **Docker Compose** (tam yığın için)
+- **PowerShell** (`seed.ps1` için; isteğe bağlı)
+- **k6** (performans testi bölümü için; isteğe bağlı)
+
+**Docker notu:** `backend/Dockerfile` imaj oluştururken ilgili modülün `target/*.jar` dosyasını kopyalar. `docker compose build` / `up` öncesi mutlaka `cd backend && mvn package -DskipTests` (veya testlerle birlikte) çalıştırın; aksi halde `target` klasörü boş olduğundan derleme hata verir.
+
 ## Mimari
 
 ```mermaid
@@ -33,7 +59,7 @@ graph TB
 | Katman | Teknoloji |
 |--------|-----------|
 | Backend | Spring Boot 3.3.2, Java 17 |
-| Microservice | 12 izole servis + API Gateway |
+| Microservice | 11 alan servisi + kullanıcı (Mongo + ayrı JPA/H2 demoları) + API Gateway (Docker’da 13 Spring uygulaması) |
 | Gateway | Spring Cloud Gateway 2023.0.3 |
 | Database | MongoDB 7.0 (NoSQL) + H2/JPA (service-user-jpa) |
 | Desktop | JavaFX 21.0.2, HttpClient, Jackson |
