@@ -40,19 +40,7 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$[0].name").value("Vadesiz"));
     }
 
-    @Test
-    void create_shouldReturnCreated() throws Exception {
-        AccountRequest req = new AccountRequest("u1", "Vadesiz", "BANK", "Ziraat", 1000, "TRY");
-        AccountResponse resp = new AccountResponse("1", "u1", "Vadesiz", "BANK", "Ziraat", 1000, "TRY", LocalDateTime.now(), null);
-        when(accountService.create(any())).thenReturn(resp);
-
-        mockMvc.perform(post("/api/accounts")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.userId").value("u1"));
-    }
-
+    
     @Test
     void update_shouldReturnOk() throws Exception {
         AccountRequest req = new AccountRequest("u1", "Güncel", "BANK", "Ziraat", 500, "TRY");
@@ -70,5 +58,18 @@ class AccountControllerTest {
     void delete_shouldReturnNoContent() throws Exception {
         mockMvc.perform(delete("/api/accounts/1"))
                 .andExpect(status().isNoContent());
+    }
+    
+    @Test
+    void create_shouldReturnCreated() throws Exception {
+        AccountRequest req = new AccountRequest("u1", "Vadesiz", "BANK", "Ziraat", 1000, "TRY");
+        AccountResponse resp = new AccountResponse("1", "u1", "Vadesiz", "BANK", "Ziraat", 1000, "TRY", LocalDateTime.now(), null);
+        when(accountService.create(any())).thenReturn(resp);
+
+        mockMvc.perform(post("/api/accounts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value("u1"));
     }
 }
