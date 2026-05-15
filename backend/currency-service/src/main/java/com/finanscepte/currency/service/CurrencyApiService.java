@@ -118,11 +118,11 @@ public class CurrencyApiService {
     private FetchResult<Map<String, CryptoRate>> tryBinanceBatch() {
         try {
             String symbolsJson = "[\"" + String.join("\",\"", BINANCE_SYMBOLS) + "\"]";
+            // Tek encode: .encode() çağrısı Binance'ta 400 (illegal symbols) üretir
             String url = UriComponentsBuilder
                     .fromHttpUrl("https://api.binance.com/api/v3/ticker/24hr")
                     .queryParam("symbols", symbolsJson)
                     .build()
-                    .encode()
                     .toUriString();
             List<Map<String, Object>> tickers = restTemplate.getForObject(url, List.class);
             Map<String, CryptoRate> rates = parseBinanceTickers(tickers);
