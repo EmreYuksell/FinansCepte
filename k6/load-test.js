@@ -25,6 +25,13 @@ export default function () {
   );
   check(loginRes, { 'login status 200': (r) => r.status === 200 });
 
+  const badLogin = http.post(
+    `${BASE_URL}/api/users/login`,
+    JSON.stringify({ email: LOGIN_EMAIL, password: 'invalid-password' }),
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+  check(badLogin, { 'login invalid returns 401': (r) => r.status === 401 });
+
   let userId = 'demo-user';
   try {
     const body = JSON.parse(loginRes.body);
