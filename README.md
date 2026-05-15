@@ -6,9 +6,10 @@ TBL324 - İleri Java Uygulamaları Dersi Projesi
 
 ```mermaid
 graph TB
-    subgraph "Docker Compose - 13 Servis"
+    subgraph "Docker Compose - 14 Servis"
         GW[API Gateway<br/>:8080]
-        U[service-user<br/>:8081]
+        U[service-user<br/>:8081 Mongo]
+        UJ[service-user-jpa<br/>:8092 H2/JDBC]
         P[service-product<br/>:8082]
         T[transaction-service<br/>:8083]
         S[subscription-service<br/>:8084]
@@ -34,7 +35,7 @@ graph TB
 | Backend | Spring Boot 3.3.2, Java 17 |
 | Microservice | 12 izole servis + API Gateway |
 | Gateway | Spring Cloud Gateway 2023.0.3 |
-| Database | MongoDB 7.0 (NoSQL) |
+| Database | MongoDB 7.0 (NoSQL) + H2/JPA (service-user-jpa) |
 | Desktop | JavaFX 21.0.2, HttpClient, Jackson |
 | Auth | BCrypt şifre hashleme, email/şifre giriş |
 | PDF | OpenPDF 2.0.3 |
@@ -64,7 +65,8 @@ graph TB
 | Servis | Port | Swagger |
 |--------|------|---------|
 | api-gateway | 8080 | Tüm route'lar `/api/*` altında |
-| service-user | 8081 | http://localhost:8081/swagger-ui.html |
+| service-user | 8081 | http://localhost:8081/swagger-ui.html (MongoDB) |
+| service-user-jpa | 8092 | http://localhost:8092/swagger-ui.html (H2/JDBC), H2 Console: `/h2-console` |
 | service-product | 8082 | http://localhost:8082/swagger-ui.html |
 | transaction-service | 8083 | http://localhost:8083/swagger-ui.html |
 | subscription-service | 8084 | http://localhost:8084/swagger-ui.html |
@@ -85,6 +87,10 @@ cd backend && mvn package -DskipTests
 # 2. Docker Compose ile tüm sistemi başlat
 docker compose up -d
 
+# Kullanıcı servisi iki profilde çalışır:
+# - service-user (8081): MongoDB — gateway ve desktop bu adresi kullanır
+# - service-user-jpa (8092): H2/JDBC demo — curl http://localhost:8092/api/users
+
 # 3. Demo verileri yükle
 powershell -File seed.ps1
 
@@ -102,7 +108,7 @@ mvn javafx:run -f desktop-app/pom.xml
 |---------|--------------|----------|
 | **Observer** | notification-service | `NotificationEvent` → `NotificationEventListener` ile event-driven bildirim |
 | **Strategy** | report-service | `ReportGenerationStrategy` → `MonthlySummaryStrategy`, `CategoryBreakdownStrategy` |
-| **Template Method** | common-lib | `AbstractGenericService` ile CRUD şablonu |
+| **Template Method** | common-lib | `AbstractGenericService` (entity) + `AbstractGenericDtoService` (DTO) ile CRUD şablonu |
 | **Repository** | Tüm servisler | `GenericRepository<T,ID>` Spring Data MongoDB üzerinde |
 | **Gateway** | api-gateway | Spring Cloud Gateway ile routing, load balancing |
 | **Scheduled** | currency-service, notification-service | `@Scheduled` ile periyodik kur güncelleme ve bildirim kontrolü |
@@ -117,6 +123,22 @@ mvn javafx:run -f desktop-app/pom.xml
 | **I**nterface Segregation | Her servis kendi interface'ine sahip |
 | **D**ependency Inversion | Constructor injection, interface'e bağımlılık |
 
+## Performans Testleri (k6)
+
+```bash
+docker compose up -d
+k6 run k6/load-test.js
+# JSON rapor: k6 run --out json=k6/report.json k6/load-test.js
+```
+
+| Metrik | Değer (son koşu) |
+|--------|------------------|
+| Ortalama gecikme (avg) | ~6.6 ms |
+| p95 gecikme | ~12.6 ms |
+| Throughput | ~26 req/s |
+| Hata oranı | 0% |
+| Test edilen endpoint | login, products, transactions, budgets, accounts, goals + POST transactions |
+
 ## Hata Yönetimi
 
 | HTTP Kodu | Durum |
@@ -128,34 +150,3 @@ mvn javafx:run -f desktop-app/pom.xml
 | 401 | Yetkisiz (yanlış şifre) |
 | 404 | Kaynak bulunamadı |
 | 500 | Sunucu hatası |
-
-## Git Commit Stratejisi (TDD)
-
-```
-9826b4b feat: backend servisleri tamamla, PDF export, gerçek döviz API, auth sistemi
-062a71a Mevcut Sayfa iyileştirmeleri
-d7c7efc CustomGUI
-8b3e9d8 chore: remove mobile app, add README back
-875b6d8 chore: exclude markdown files from version control
-c928856 docs: add README with Mermaid diagrams, performance report, architecture docs
-```
-
-## Değerlendirme Kriterleri Karşılama
-
-| Kriter | Puan | Durum |
-|--------|------|-------|
-| API & Back-end | 10 | ✓ 12 microservice |
-| Generic Yapılar | 10 | ✓ GenericRepository, GenericService |
-| Custom GUI | 10 | ✓ JavaFX + PieChart + BarChart + LineChart + ProgressBar |
-| JDBC & NoSQL | 10 | ✓ MongoDB (tüm servisler) |
-| SOLID & OOP | 10 | ✓ Observer + Strategy + Template Method + SOLID |
-| Hata Yönetimi | 5 | ✓ GlobalExceptionHandler (4xx, 5xx) |
-| Performans Testleri | 5 | ✓ k6 |
-| Analiz & Doküman | 5 | ✓ README + Mermaid + Swagger |
-| **Zorunlu Toplam** | **65** | ✓ |
-| Mikroservis Mimarisi | +10 | ✓ 12 servis + Gateway |
-| Gateway | +5 | ✓ Spring Cloud Gateway |
-| Test-Driven Geliştirme | +10 | ✓ RED→GREEN commit geçmişi |
-| Dockerize Sistem | +5 | ✓ docker compose up -d |
-| **Ek Özellikler** | **+30** | |
-| **Genel Toplam** | **95** | |

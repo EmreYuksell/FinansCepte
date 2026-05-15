@@ -1,10 +1,8 @@
 package com.finanscepte.currency.service;
 
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -14,10 +12,7 @@ public class CurrencyApiService {
     private final RestTemplate restTemplate;
 
     public CurrencyApiService() {
-        this.restTemplate = new RestTemplateBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .readTimeout(Duration.ofSeconds(10))
-                .build();
+        this.restTemplate = new RestTemplate();
     }
 
     public Map<String, Double> fetchFiatRates() {

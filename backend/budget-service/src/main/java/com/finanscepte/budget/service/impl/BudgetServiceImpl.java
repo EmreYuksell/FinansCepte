@@ -1,12 +1,13 @@
 package com.finanscepte.budget.service.impl;
 
-import com.finanscepte.common.exception.ResourceNotFoundException;
 import com.finanscepte.budget.dto.BudgetRequest;
 import com.finanscepte.budget.dto.BudgetResponse;
 import com.finanscepte.budget.model.Budget;
 import com.finanscepte.budget.repository.BudgetRepository;
 import com.finanscepte.budget.service.BudgetService;
 import com.finanscepte.budget.util.BudgetMapper;
+import com.finanscepte.common.AbstractGenericDtoService;
+import com.finanscepte.common.GenericRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -14,7 +15,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-public class BudgetServiceImpl implements BudgetService {
+public class BudgetServiceImpl extends AbstractGenericDtoService<BudgetRequest, BudgetResponse, Budget, String>
+        implements BudgetService {
 
     private final BudgetRepository budgetRepository;
     private final BudgetMapper budgetMapper;
@@ -25,50 +27,45 @@ public class BudgetServiceImpl implements BudgetService {
     }
 
     @Override
-    public BudgetResponse create(BudgetRequest request) {
-        Budget budget = budgetMapper.toEntity(request);
-        Budget saved = budgetRepository.save(budget);
-        return budgetMapper.toResponse(saved);
+    protected GenericRepository<Budget, String> getRepository() {
+        return budgetRepository;
     }
 
     @Override
-    public BudgetResponse update(String id, BudgetRequest request) {
-        Budget existing = budgetRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Budget", "id", id));
-        existing.setCategory(request.category());
-        existing.setLimitAmount(request.limitAmount());
-        existing.setMonth(request.month());
-        existing.setYear(request.year());
-        existing.setUpdatedAt(LocalDateTime.now());
-        Budget updated = budgetRepository.save(existing);
-        return budgetMapper.toResponse(updated);
+    protected String getEntityName() {
+        return "Budget";
     }
 
     @Override
-    public BudgetResponse findById(String id) {
-        return budgetRepository.findById(id)
-                .map(budgetMapper::toResponse)
-                .orElseThrow(() -> new ResourceNotFoundException("Budget", "id", id));
+    protected Budget toEntity(BudgetRequest request) {
+        return budgetMapper.toEntity(request);
     }
 
     @Override
-    public List<BudgetResponse> findAll() {
-        return budgetRepository.findAll().stream()
-                .map(budgetMapper::toResponse)
-                .toList();
+    protected BudgetResponse toResponse(Budget entity) {
+        return budgetMapper.toResponse(entity);
+    }
+
+    @Override
+    protected void applyUpdate(Budget entity, BudgetRequest request) {
+        entity.setCategory(request.category());
+        entity.setLimitAmount(request.limitAmount());
+        entity.setMonth(request.month());
+        entity.setYear(request.year());
+        entity.setUpdatedAt(LocalDateTime.now());
     }
 
     @Override
     public List<BudgetResponse> findByUserIdAndMonthAndYear(String userId, Integer month, Integer year) {
         return budgetRepository.findByUserIdAndMonthAndYear(userId, month, year).stream()
-                .map(budgetMapper::toResponse)
+                .map(this::toResponse)
                 .toList();
     }
 
     @Override
     public List<BudgetResponse> findByUserId(String userId) {
         return budgetRepository.findByUserId(userId).stream()
-                .map(budgetMapper::toResponse)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -78,13 +75,5 @@ public class BudgetServiceImpl implements BudgetService {
         return budgets.stream()
                 .filter(b -> b.getCategory().equalsIgnoreCase(category))
                 .anyMatch(b -> b.getSpentAmount().add(amount).compareTo(b.getLimitAmount()) > 0);
-    }
-
-    @Override
-    public void deleteById(String id) {
-        if (!budgetRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Budget", "id", id);
-        }
-        budgetRepository.deleteById(id);
     }
 }

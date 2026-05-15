@@ -12,4 +12,6 @@ public interface UserService extends GenericService<UserResponse, String> {
     UserResponse findByEmail(String email);
 
     UserResponse login(LoginRequest request);
+
+    void changePassword(String id, String oldPassword, String newPassword);
 }

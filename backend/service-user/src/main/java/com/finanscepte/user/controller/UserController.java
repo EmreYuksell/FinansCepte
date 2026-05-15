@@ -1,5 +1,6 @@
 package com.finanscepte.user.controller;
 
+import com.finanscepte.user.dto.ChangePasswordRequest;
 import com.finanscepte.user.dto.LoginRequest;
 import com.finanscepte.user.dto.UserRequest;
 import com.finanscepte.user.dto.UserResponse;
@@ -57,6 +58,14 @@ public class UserController {
     public ResponseEntity<Void> delete(@PathVariable String id) {
         userService.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/change-password")
+    public ResponseEntity<Void> changePassword(
+            @PathVariable String id,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        userService.changePassword(id, request.oldPassword(), request.newPassword());
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/login")

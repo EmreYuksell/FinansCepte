@@ -4,7 +4,6 @@ import com.finanscepte.currency.model.CurrencyRate;
 import com.finanscepte.currency.model.PriceAlert;
 import com.finanscepte.currency.repository.CurrencyRateRepository;
 import com.finanscepte.currency.repository.PriceAlertRepository;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -12,7 +11,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +31,7 @@ public class CurrencyUpdateService {
         this.currencyRateRepository = currencyRateRepository;
         this.priceAlertRepository = priceAlertRepository;
         this.currencyApiService = currencyApiService;
-        this.restTemplate = new RestTemplateBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
-                .readTimeout(Duration.ofSeconds(5))
-                .build();
+        this.restTemplate = new RestTemplate();
     }
 
     @Scheduled(fixedRate = 300000)

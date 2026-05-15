@@ -35,6 +35,21 @@ services:
     networks:
       - financescepte-network
 
+  service-user-jpa:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        MODULE: service-user
+    container_name: service-user-jpa
+    ports:
+      - "8092:8092"
+    environment:
+      SPRING_PROFILES_ACTIVE: jpa
+      SERVER_PORT: 8092
+    networks:
+      - financescepte-network
+
   service-product:
     build:
       context: ./backend
@@ -199,9 +214,12 @@ services:
       - "8091:8091"
     environment:
       SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/finanscepte_settings
+      USER_SERVICE_URL: http://service-user:8081
     depends_on:
       mongodb:
         condition: service_healthy
+      service-user:
+        condition: service_started
     networks:
       - financescepte-network
 

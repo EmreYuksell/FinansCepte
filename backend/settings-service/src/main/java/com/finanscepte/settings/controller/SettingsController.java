@@ -4,9 +4,12 @@ import com.finanscepte.settings.model.UserProfile;
 import com.finanscepte.settings.model.UserSettings;
 import com.finanscepte.settings.repository.UserProfileRepository;
 import com.finanscepte.settings.repository.UserSettingsRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
@@ -16,10 +19,17 @@ public class SettingsController {
 
     private final UserSettingsRepository userSettingsRepository;
     private final UserProfileRepository userProfileRepository;
+    private final RestTemplate restTemplate;
+    private final String userServiceUrl;
 
-    public SettingsController(UserSettingsRepository userSettingsRepository, UserProfileRepository userProfileRepository) {
+    public SettingsController(
+            UserSettingsRepository userSettingsRepository,
+            UserProfileRepository userProfileRepository,
+            @Value("${finanscepte.user-service-url:http://localhost:8081}") String userServiceUrl) {
         this.userSettingsRepository = userSettingsRepository;
         this.userProfileRepository = userProfileRepository;
+        this.userServiceUrl = userServiceUrl;
+        this.restTemplate = new RestTemplate();
     }
 
     @GetMapping
@@ -69,7 +79,28 @@ public class SettingsController {
 
     @PostMapping("/change-password")
     public ResponseEntity<Void> changePassword(@RequestBody Map<String, String> body) {
-        return ResponseEntity.ok().build();
+        String userId = body.get("userId");
+        String oldPassword = body.get("oldPassword");
+        String newPassword = body.get("newPassword");
+
+        if (userId == null || userId.isBlank()
+                || oldPassword == null || oldPassword.isBlank()
+                || newPassword == null || newPassword.isBlank()) {
+            throw new IllegalArgumentException("userId, oldPassword ve newPassword zorunludur");
+        }
+        if (newPassword.length() < 6) {
+            throw new IllegalArgumentException("Yeni şifre en az 6 karakter olmalıdır");
+        }
+
+        try {
+            restTemplate.postForEntity(
+                    userServiceUrl + "/api/users/" + userId + "/change-password",
+                    Map.of("oldPassword", oldPassword, "newPassword", newPassword),
+                    Void.class);
+            return ResponseEntity.ok().build();
+        } catch (HttpClientErrorException ex) {
+            return ResponseEntity.status(ex.getStatusCode()).build();
+        }
     }
 
     @GetMapping("/export")

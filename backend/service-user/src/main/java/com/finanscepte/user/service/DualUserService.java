@@ -161,13 +161,36 @@ public class DualUserService implements UserService {
                     updated.getUpdatedAt()
             );
         } else {
-            User user = userMapper.toEntity(null);
-            user.setId(id);
+            User user = userMongoRepository.findById(id)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
             user.setName(dto.name());
             user.setEmail(dto.email());
             user.setUpdatedAt(LocalDateTime.now());
             User updated = userMongoRepository.save(user);
             return userMapper.toResponse(updated);
+        }
+    }
+
+    @Override
+    public void changePassword(String id, String oldPassword, String newPassword) {
+        if (isJpaMode()) {
+            UserJpaEntity entity = userJpaRepository.findById(Long.valueOf(id))
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+            if (!passwordEncoder.matches(oldPassword, entity.getPassword())) {
+                throw new IllegalArgumentException("Mevcut şifre hatalı");
+            }
+            entity.setPassword(passwordEncoder.encode(newPassword));
+            entity.setUpdatedAt(LocalDateTime.now());
+            userJpaRepository.save(entity);
+        } else {
+            User user = userMongoRepository.findById(id)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+            if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+                throw new IllegalArgumentException("Mevcut şifre hatalı");
+            }
+            user.setPassword(passwordEncoder.encode(newPassword));
+            user.setUpdatedAt(LocalDateTime.now());
+            userMongoRepository.save(user);
         }
     }
 

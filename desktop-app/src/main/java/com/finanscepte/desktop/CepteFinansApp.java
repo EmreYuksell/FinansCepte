@@ -1,5 +1,7 @@
 package com.finanscepte.desktop;
 
+import com.finanscepte.desktop.ui.FinancialGaugeCanvas;
+import com.finanscepte.desktop.ui.SparklineCanvas;
 import com.finanscepte.desktop.util.ApiClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -62,6 +64,8 @@ public class CepteFinansApp extends Application {
     private BarChart<String, Number> monthlyBar;
     private LineChart<String, Number> trendLine;
     private TableView<JsonNode> recentTxTable;
+    private FinancialGaugeCanvas financialGauge;
+    private SparklineCanvas reportSparkline;
 
     // Otomatik yenileme
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -120,9 +124,10 @@ public class CepteFinansApp extends Application {
                     ApiClient.currentUserId = uid;
                     Platform.runLater(() -> showMain(uid, uname));
                 } catch (Exception ex) {
-                    String err = ex.getMessage();
-                    if (err == null || err.isBlank() || err.equals("null")) err = "Bilinmeyen bir hata oluştu. Backend bağlantısını veya şifrenizi kontrol edin.";
-                    Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, "Giriş başarısız: " + err).show());
+                    String errMsg = ex.getMessage();
+                    if (errMsg == null || errMsg.isBlank() || errMsg.equals("null")) errMsg = "Bilinmeyen bir hata oluştu. Backend bağlantısını veya şifrenizi kontrol edin.";
+                    final String msg = errMsg;
+                    Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, "Giriş başarısız: " + msg).show());
                 }
             }).start();
         });
@@ -355,7 +360,9 @@ public class CepteFinansApp extends Application {
         // Will populate on refresh
         budgetWidget.setUserData("budgetWidget");
 
-        widgets.getChildren().addAll(categoryPie, budgetWidget);
+        financialGauge = new FinancialGaugeCanvas();
+
+        widgets.getChildren().addAll(categoryPie, financialGauge, budgetWidget);
 
         middle.getChildren().addAll(monthlyBar, widgets);
 
@@ -525,6 +532,10 @@ public class CepteFinansApp extends Application {
                     dailyChangeLbl.setText(String.format("%.0f ₺/gün", finalDaily));
                     dailyChangeLbl.getStyleClass().removeAll("positive", "negative");
                     dailyChangeLbl.getStyleClass().add(finalDaily > 0 ? "negative" : "positive");
+
+                    if (financialGauge != null) {
+                        financialGauge.update(finalIncome, finalExpense);
+                    }
 
                     // Pie
                     categoryPie.getData().clear();
@@ -1392,7 +1403,12 @@ public class CepteFinansApp extends Application {
         Label it = new Label("💡 Finansal Öngörüler"); it.setStyle("-fx-text-fill: #475569; -fx-font-weight: bold; -fx-font-size: 14px;");
         insight.getChildren().add(it);
 
-        bottom.getChildren().addAll(catBar, insight);
+        reportSparkline = new SparklineCanvas("Gider Trendi (Sparkline)", Color.web("#4f46e5"));
+
+        VBox sparkBox = new VBox(8, reportSparkline);
+        sparkBox.getStyleClass().add("card");
+
+        bottom.getChildren().addAll(sparkBox, catBar, insight);
 
         root.getChildren().addAll(title, filters, charts, bottom);
         ScrollPane sp = new ScrollPane(root);
@@ -1443,6 +1459,16 @@ public class CepteFinansApp extends Application {
                         }
                     }
                     line.getData().addAll(incS, expS);
+
+                    if (reportSparkline != null) {
+                        List<Double> sparkData = new ArrayList<>();
+                        if (trend != null) {
+                            for (JsonNode t : trend) {
+                                sparkData.add(t.get("expense").asDouble());
+                            }
+                        }
+                        reportSparkline.setData(sparkData);
+                    }
 
                     // Category bar
                     catBar.getData().clear();
@@ -1756,7 +1782,8 @@ public class CepteFinansApp extends Application {
                 new Alert(Alert.AlertType.ERROR, "Yeni şifreler eşleşmiyor.").show(); return;
             }
             try {
-                String json = String.format("{\"oldPassword\":\"%s\",\"newPassword\":\"%s\"}", oldPass.getText(), newPass.getText());
+                String json = String.format("{\"userId\":\"%s\",\"oldPassword\":\"%s\",\"newPassword\":\"%s\"}",
+                        ApiClient.currentUserId, oldPass.getText(), newPass.getText());
                 ApiClient.post("/api/settings/change-password", json);
                 new Alert(Alert.AlertType.INFORMATION, "Şifre değiştirildi.").show();
             } catch (Exception ex) {}
