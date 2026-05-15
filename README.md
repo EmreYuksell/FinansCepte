@@ -2,9 +2,51 @@
 
 TBL324 - İleri Java Uygulamaları Dersi Projesi
 
+**Kurum:** Kocaeli Üniversitesi, Teknoloji Fakültesi, Bilgisayar Mühendisliği Bölümü
+
+## Grup bilgisi
+
+| Alan | Bilgi |
+|------|--------|
+| Grup / proje | TBL324 dönem projesi — CepteFinans |
+| Teslim kapsamı | Mikroservis arka uç, API Gateway, MongoDB (+ JDBC/H2 örneği), JavaFX masaüstü, Docker Compose, testler, k6 |
+
+## Ekip üyeleri
+
+| Ad Soyad | Öğrenci no. |
+|----------|-------------|
+| Emre Yüksel | 221307103 |
+| Yunus Emir Atıcı | 221307040 |
+
+İletişim ve kod paylaşımı Git üzerinden yapılmıştır. Toplantılar çevrim içi gerçekleştirilmiştir.
+
+## Proje konusu
+
+CepteFinans, kullanıcıların kişisel finanslarını tek bir masaüstü uygulaması üzerinden yönetmesini sağlar: gelir–gider ve işlem kayıtları, bütçe ve abonelik takibi, hesap ve varlık yönetimi, tasarruf hedefleri, raporlar (grafik ve PDF), döviz/kripto kurları ve alarmlar, bildirimler ile profil ve uygulama ayarları.
+
+Teknik olarak sistem mikroservis mimarisiyle kurgulanmıştır: Spring Cloud API Gateway, MongoDB, JavaFX istemci, Docker Compose dağıtımı ve OpenAPI ile belgelenmiş REST API’ler.
+
+## Görev dağılımı
+
+Proje boyunca işler **büyük ölçüde birlikte** yürütülmüştür; katı bir “sadece bir kişi şu modülü yazdı” ayrımı tutulmamıştır. Her iki ekip üyesi de mimari, kod, test ve dokümantasyon aşamalarında yer almıştır.
+
+| Çalışma alanı | Emre Yüksel | Yunus Emir Atıcı |
+|---------------|:-----------:|:----------------:|
+| Mikroservis, gateway, Docker Compose | ✓ | ✓ |
+| Kullanıcı servisi, giriş ve kayıt | ✓ | ✓ |
+| İşlem, bütçe, abonelik | ✓ | ✓ |
+| Hesaplar, hedefler, ayarlar | ✓ | ✓ |
+| Rapor, bildirim, döviz | ✓ | ✓ |
+| JavaFX arayüz ve özel grafikler | ✓ | ✓ |
+| common-lib, generic katman, hata yönetimi | ✓ | ✓ |
+| Testler (JUnit, MockMvc, Testcontainers) | ✓ | ✓ |
+| k6, README, demo veri (`seed.ps1`) | ✓ | ✓ |
+
+**Çalışma biçimi:** Git commit’leri, Swagger ile API kontrolü, Docker ile ortak ortam, haftalık kısa toplantılar; bloklayıcı hatalarda birlikte debug.
+
 ## Proje özeti
 
-**CepteFinans**, günlük finansı tek noktada toplamak için geliştirilmiş bir kişisel finans platformudur. Kullanıcı; işlem, bütçe ve abonelik takibinin yanı sıra hesap ve varlık yönetimi, tasarruf hedefleri, grafik raporları, döviz ve kripto kurları, bildirimler ve kişisel ayarlar için JavaFX masaüstü istemcisini kullanır. Tüm özellikler, **Spring Cloud Gateway** arkasındaki küçük ve odaklı **Spring Boot mikroservisleri** üzerinden **REST API** ile sunulur; kalıcı veri **MongoDB** ile saklanır. 
+**CepteFinans**, günlük finansı tek noktada toplamak için geliştirilmiş bir kişisel finans platformudur. Kullanıcı; işlem, bütçe ve abonelik takibinin yanı sıra hesap ve varlık yönetimi, tasarruf hedefleri, grafik raporları, döviz ve kripto kurları, bildirimler ve kişisel ayarlar için JavaFX masaüstü istemcisini kullanır. Tüm özellikler, **Spring Cloud Gateway** arkasındaki küçük ve odaklı **Spring Boot mikroservisleri** üzerinden **REST API** ile sunulur; kalıcı veri **MongoDB** ile saklanır.
 
 Proje; **generic repository ve servis soyutlamaları**, **Observer**, **Strategy** ve **Template Method** gibi tasarım kalıpları, **Swagger/OpenAPI** ile API sözleşmesi, **Docker Compose** ile çok konteynerli çalıştırma, **birim ve entegrasyon testleri** (JUnit, Mockito, Testcontainers) ve **k6** ile yük testi altyapısı içerir.
 
@@ -129,6 +171,16 @@ mvn javafx:run -f desktop-app/pom.xml
 # Şifre: 123
 ```
 
+### Döviz/kripto canlı veri sorun giderme
+
+`currency-service` konteynerinin dış internete çıkabildiğini doğrulayın:
+
+```powershell
+docker exec currency-service wget -qO- "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCTRY"
+```
+
+Canlı durum: `GET http://localhost:8080/api/currency/status` → `lastRefreshLive: true`. Masaüstünde yedek kurlar için sarı uyarı gösterilir.
+
 ## Design Patterns
 
 | Pattern | Kullanım Yeri | Açıklama |
@@ -179,3 +231,22 @@ Tüm mikroservisler `common-lib` içindeki `GlobalExceptionHandler` ile standart
 | 401 | Yetkisiz (`UnauthorizedException`, örn. hatalı giriş) |
 | 404 | Kaynak bulunamadı |
 | 500 | Sunucu hatası |
+
+
+## Arayüz – Backend uyumu (tarama özeti)
+
+| Durum | Konu | Açıklama |
+|-------|------|----------|
+| Düzeltildi | İşlem düzenleme | Çift tıklayınca artık `PUT /api/transactions/{id}` (önceden hep yeni kayıt açıyordu) |
+| Düzeltildi | Hedefe para ekleme | `PATCH .../deposit` gövdesine `amount` gönderiliyor |
+| Düzeltildi | Ayar anahtarları | Koyu tema vb. toggle’lar `settings` JSON’u ile doğru kaydediliyor |
+| Düzeltildi | Kullanıcıya özel listeler | İşlem, bütçe, hedef, hesap, varlık, bildirimler `.../user/{id}` ile yükleniyor |
+| Düzeltildi | Döviz alarmı aç/kapa | `PUT .../toggle` boş gövde ile çağrılıyor |
+| Kısmen | Şifremi unuttum | Bilgi mesajı (backend’de sıfırlama yok) |
+| Kısmen | Beni hatırla | Yalnızca arayüz; oturum saklama yok |
+| Kısmen | Rapor türü seçimi | Combo kutusu görsel; veri her zaman trend/kategori/özet API’lerinden gelir |
+| Kısmen | Koyu tema | Ayar MongoDB’de saklanır; tüm ekran teması anında değişmez |
+| Kısmen | İki faktörlü doğrulama | Ayar bayrağı var; gerçek 2FA akışı yok |
+| Kısmen | Raporlar (analytics) | `summary`/`trend` kullanıcıya göre filtrelenmez (report-service genel veri) |
+| Düzeltildi | Abonelikler | Ayrı menü; aktif abonelik tutarları dashboard giderine dahil |
+| Yok | Mobil arayüz | Kapsam dışı |
