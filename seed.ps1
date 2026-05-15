@@ -60,5 +60,17 @@ Write-Host "`n=== RAPORLAR ===" -ForegroundColor Cyan
 Post "/api/reports" "{`"userId`":`"$u`",`"type`":`"MONTHLY_SUMMARY`",`"startDate`":`"2026-05-01T00:00:00`",`"endDate`":`"2026-05-31T00:00:00`"}"
 Post "/api/reports" "{`"userId`":`"$u`",`"type`":`"CATEGORY_BREAKDOWN`",`"startDate`":`"2026-05-01T00:00:00`",`"endDate`":`"2026-05-31T00:00:00`"}"
 
+Write-Host "`n=== HESAPLAR ===" -ForegroundColor Cyan
+Post "/api/accounts" "{`"userId`":`"$u`",`"name`":`"Ziraat Vadesiz`",`"type`":`"VADESIZ`",`"institution`":`"Ziraat Bankasi`",`"balance`":45000,`"currency`":`"TRY`"}"
+Post "/api/accounts" "{`"userId`":`"$u`",`"name`":`"Is Bankasi Birikim`",`"type`":`"BIRIKIM`",`"institution`":`"Is Bankasi`",`"balance`":120000,`"currency`":`"TRY`"}"
+Post "/api/accounts" "{`"userId`":`"$u`",`"name`":`"Garanti Yatirim`",`"type`":`"YATIRIM`",`"institution`":`"Garanti BBVA`",`"balance`":85000,`"currency`":`"TRY`"}"
+Post "/api/accounts" "{`"userId`":`"$u`",`"name`":`"Akbank Kredi Karti`",`"type`":`"KREDI_KARTI`",`"institution`":`"Akbank`",`"balance`":-12500,`"currency`":`"TRY`"}"
+
+Write-Host "`n=== VARLIKLAR ===" -ForegroundColor Cyan
+Post "/api/assets" "{`"userId`":`"$u`",`"name`":`"Bitcoin`",`"type`":`"KRIPTO`",`"currentValue`":3200000,`"purchaseValue`":2800000,`"quantity`":0.15,`"currency`":`"TRY`"}"
+Post "/api/assets" "{`"userId`":`"$u`",`"name`":`"THYAO`",`"type`":`"HISSE`",`"currentValue`":285,`"purchaseValue`":240,`"quantity`":500,`"currency`":`"TRY`"}"
+Post "/api/assets" "{`"userId`":`"$u`",`"name`":`"Gram Altin`",`"type`":`"ALTIN`",`"currentValue`":2850,`"purchaseValue`":2600,`"quantity`":25,`"currency`":`"TRY`"}"
+Post "/api/assets" "{`"userId`":`"$u`",`"name`":`"USD`",`"type`":`"DOVIZ`",`"currentValue`":38.5,`"purchaseValue`":34.2,`"quantity`":2000,`"currency`":`"TRY`"}"
+
 Write-Host "`n=== TAMAMLANDI ===" -ForegroundColor Cyan
 Write-Host "Kullanici: emreyuksell78@gmail.com / 123" -ForegroundColor Yellow

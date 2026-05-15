@@ -30,11 +30,6 @@ public class AssetController {
         return ResponseEntity.ok(assetService.findAll());
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<AssetResponse> findById(@PathVariable String id) {
-        return ResponseEntity.ok(assetService.findById(id));
-    }
-
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<AssetResponse>> findByUserId(@PathVariable String userId) {
         return ResponseEntity.ok(assetService.findByUserId(userId));
@@ -45,6 +40,11 @@ public class AssetController {
             @PathVariable String userId,
             @PathVariable String type) {
         return ResponseEntity.ok(assetService.findByUserIdAndType(userId, type));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<AssetResponse> findById(@PathVariable String id) {
+        return ResponseEntity.ok(assetService.findById(id));
     }
 
     @PutMapping("/{id}")

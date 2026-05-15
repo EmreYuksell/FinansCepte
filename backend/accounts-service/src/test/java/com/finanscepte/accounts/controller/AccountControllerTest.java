@@ -32,6 +32,16 @@ class AccountControllerTest {
     @MockBean private AccountService accountService;
 
     @Test
+    void findByUserId_shouldReturnList() throws Exception {
+        AccountResponse resp = new AccountResponse("1", "u1", "Vadesiz", "VADESIZ", "Ziraat", 1000, "TRY", LocalDateTime.now(), null);
+        when(accountService.findByUserId("u1")).thenReturn(List.of(resp));
+
+        mockMvc.perform(get("/api/accounts/user/u1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Vadesiz"));
+    }
+
+    @Test
     void findAll_shouldReturnList() throws Exception {
         AccountResponse resp = new AccountResponse("1", "u1", "Vadesiz", "BANK", "Ziraat", 1000, "TRY", LocalDateTime.now(), null);
         when(accountService.findAll()).thenReturn(List.of(resp));

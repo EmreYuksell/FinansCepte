@@ -329,6 +329,69 @@ public class CepteFinansApp extends Application {
         Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, action + ": " + formatError(ex)).show());
     }
 
+    /** TR/EN sayı girişi: 1.250,50 veya 1250.50 */
+    private double parseAmount(String text) {
+        if (text == null || text.isBlank()) return 0;
+        String s = text.trim().replace(" ", "").replace("₺", "");
+        if (s.contains(",") && s.contains(".")) {
+            s = s.replace(".", "").replace(",", ".");
+        } else if (s.contains(",")) {
+            s = s.replace(",", ".");
+        }
+        return Double.parseDouble(s);
+    }
+
+    private String toAccountJson(String uid, String name, String type, String institution,
+                                 String balanceText, String currency) throws Exception {
+        ObjectNode n = mapper.createObjectNode();
+        n.put("userId", uid);
+        n.put("name", name);
+        n.put("type", type);
+        n.put("institution", institution != null ? institution : "");
+        n.put("balance", parseAmount(balanceText));
+        n.put("currency", currency == null || currency.isBlank() ? "TRY" : currency.trim());
+        return mapper.writeValueAsString(n);
+    }
+
+    private String toAssetJson(String uid, String name, String type, String currentText,
+                               String purchaseText, String qtyText, String currency) throws Exception {
+        double quantity = parseAmount(qtyText);
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Miktar sıfırdan büyük olmalıdır.");
+        }
+        ObjectNode n = mapper.createObjectNode();
+        n.put("userId", uid);
+        n.put("name", name);
+        n.put("type", type);
+        n.put("currentValue", parseAmount(currentText));
+        n.put("purchaseValue", parseAmount(purchaseText));
+        n.put("quantity", quantity);
+        n.put("currency", currency == null || currency.isBlank() ? "TRY" : currency.trim());
+        return mapper.writeValueAsString(n);
+    }
+
+    private void updateInvestPie() {
+        Platform.runLater(() -> {
+            try {
+                for (Node n : contentArea.lookupAll(".chart")) {
+                    if ("investPie".equals(n.getUserData()) && n instanceof PieChart pie) {
+                        pie.getData().clear();
+                        Map<String, Double> byType = new HashMap<>();
+                        for (JsonNode a : assetList) {
+                            if (a == null || !a.has("quantity") || !a.has("currentValue")) continue;
+                            String t = a.has("type") ? a.get("type").asText() : "Diğer";
+                            double val = a.get("quantity").asDouble() * a.get("currentValue").asDouble();
+                            if (val > 0) byType.merge(t, val, Double::sum);
+                        }
+                        for (Map.Entry<String, Double> e : byType.entrySet()) {
+                            pie.getData().add(new PieChart.Data(e.getKey(), e.getValue()));
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+
     // ================ MAIN APP ================
     private void showMain(String userId, String userName) {
         mainRoot = new BorderPane();
@@ -1162,7 +1225,10 @@ public class CepteFinansApp extends Application {
 
         // Accounts Table
         Label accTitle = new Label("💳 Hesaplar"); accTitle.setStyle("-fx-text-fill: #475569; -fx-font-weight: bold; -fx-font-size: 16px;");
+        Label accEmptyHint = new Label("Henüz hesap yok — «Hesap Ekle» ile oluşturabilirsiniz.");
+        accEmptyHint.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
         TableView<JsonNode> accTable = new TableView<>(); accTable.getStyleClass().add("table-view");
+        accTable.setPlaceholder(new Label("Hesap bulunamadı"));
         accTable.setItems(accountList); accTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         accTable.getColumns().addAll(
             col("Ad","name",150), col("Tür","type",100), col("Kurum","institution",150),
@@ -1187,6 +1253,7 @@ public class CepteFinansApp extends Application {
         // Assets Table
         Label assetTitle = new Label("📈 Varlıklar"); assetTitle.setStyle("-fx-text-fill: #475569; -fx-font-weight: bold; -fx-font-size: 16px;");
         TableView<JsonNode> assetTable = new TableView<>(); assetTable.getStyleClass().add("table-view");
+        assetTable.setPlaceholder(new Label("Varlık bulunamadı"));
         assetTable.setItems(assetList); assetTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<JsonNode,String> assetName = col("Ad","name",120);
         TableColumn<JsonNode,String> assetType = col("Tür","type",100);
@@ -1195,8 +1262,12 @@ public class CepteFinansApp extends Application {
         TableColumn<JsonNode,String> assetPur = col("Alış","purchaseValue",110);
         TableColumn<JsonNode,String> assetTot = new TableColumn<>("Toplam Değer");
         assetTot.setCellValueFactory(data -> {
-            double q = data.getValue().get("quantity").asDouble();
-            double c = data.getValue().get("currentValue").asDouble();
+            JsonNode row = data.getValue();
+            if (row == null || !row.has("quantity") || !row.has("currentValue")) {
+                return new javafx.beans.property.SimpleStringProperty("");
+            }
+            double q = row.get("quantity").asDouble();
+            double c = row.get("currentValue").asDouble();
             return new javafx.beans.property.SimpleStringProperty(tl.format(q * c));
         });
         TableColumn<JsonNode,String> assetPnL = new TableColumn<>("Kar/Zarar");
@@ -1205,10 +1276,13 @@ public class CepteFinansApp extends Application {
                 super.updateItem(item, empty);
                 if (empty || getTableRow() == null || getTableRow().getItem() == null) { setText(""); return; }
                 JsonNode n = getTableRow().getItem();
+                if (!n.has("quantity") || !n.has("currentValue") || !n.has("purchaseValue")) {
+                    setText(""); return;
+                }
                 double q = n.get("quantity").asDouble();
                 double cur = n.get("currentValue").asDouble();
                 double pur = n.get("purchaseValue").asDouble();
-                double pnl = (cur - pur) * q;
+                double pnl = n.has("profitLoss") ? n.get("profitLoss").asDouble() : (cur - pur) * q;
                 setText(tl.format(pnl));
                 setStyle(pnl >= 0 ? "-fx-text-fill: #10b981; -fx-font-weight: bold;" : "-fx-text-fill: #4f46e5; -fx-font-weight: bold;");
             }
@@ -1237,7 +1311,7 @@ public class CepteFinansApp extends Application {
         investPie.setUserData("investPie");
         investBox.getChildren().addAll(iTitle, investPie);
 
-        root.getChildren().addAll(title, toolbar, accTitle, accTable, assetTitle, assetTable, investBox);
+        root.getChildren().addAll(title, toolbar, accTitle, accEmptyHint, accTable, assetTitle, assetTable, investBox);
         ScrollPane sp = new ScrollPane(root);
         sp.setFitToWidth(true); sp.getStyleClass().add("scroll-pane");
 
@@ -1248,36 +1322,25 @@ public class CepteFinansApp extends Application {
     private void loadAccounts() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.getJsonArray(userListPath("accounts"));
+                String path = userListPath("accounts");
+                JsonNode[] d = ApiClient.getJsonArray(path);
                 Platform.runLater(() -> accountList.setAll(d != null ? d : new JsonNode[0]));
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                showApiError("Hesaplar yüklenemedi", e);
+            }
         }).start();
     }
 
     private void loadAssets() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.getJsonArray(userListPath("assets"));
-                Platform.runLater(() -> {
-                    assetList.setAll(d != null ? d : new JsonNode[0]);
-                    // Update pie chart
-                    for (Node n : contentArea.lookupAll(".chart")) {
-                        if ("investPie".equals(n.getUserData()) && n instanceof PieChart) {
-                            PieChart pie = (PieChart) n;
-                            pie.getData().clear();
-                            Map<String, Double> byType = new HashMap<>();
-                            for (JsonNode a : assetList) {
-                                String t = a.has("type") ? a.get("type").asText() : "Diğer";
-                                double val = a.get("quantity").asDouble() * a.get("currentValue").asDouble();
-                                byType.merge(t, val, Double::sum);
-                            }
-                            for (Map.Entry<String, Double> e : byType.entrySet()) {
-                                pie.getData().add(new PieChart.Data(e.getKey(), e.getValue()));
-                            }
-                        }
-                    }
-                });
-            } catch (Exception e) {}
+                String path = userListPath("assets");
+                JsonNode[] d = ApiClient.getJsonArray(path);
+                Platform.runLater(() -> assetList.setAll(d != null ? d : new JsonNode[0]));
+                updateInvestPie();
+            } catch (Exception e) {
+                showApiError("Varlıklar yüklenemedi", e);
+            }
         }).start();
     }
 
@@ -1310,13 +1373,20 @@ public class CepteFinansApp extends Application {
         save.setOnAction(e -> {
             String uid = requireCurrentUserId();
             if (uid == null) return;
+            if (name.getText().isBlank()) {
+                new Alert(Alert.AlertType.WARNING, "Hesap adı gerekli.").show();
+                return;
+            }
             try {
-                String json = String.format("{\"userId\":\"%s\",\"name\":\"%s\",\"type\":\"%s\",\"institution\":\"%s\",\"balance\":%s,\"currency\":\"%s\"}",
-                    uid, name.getText(), type.getValue(), institution.getText(), balance.getText(), currency.getText());
+                String json = toAccountJson(uid, name.getText(), type.getValue(),
+                        institution.getText(), balance.getText(), currency.getText());
                 if (existing != null) ApiClient.put("/api/accounts/" + existing.get("id").asText(), json);
                 else ApiClient.post("/api/accounts", json);
-                d.close(); loadAccounts();
-            } catch (Exception ex) {}
+                d.close();
+                loadAccounts();
+            } catch (Exception ex) {
+                showApiError("Hesap kaydedilemedi", ex);
+            }
         });
         Button cancel = new Button("İptal"); cancel.getStyleClass().addAll("btn", "btn-ghost"); cancel.setOnAction(e -> d.close());
         HBox btns = new HBox(10, save, cancel);
@@ -1343,6 +1413,10 @@ public class CepteFinansApp extends Application {
             purVal.setText(existing.has("purchaseValue") ? existing.get("purchaseValue").asText() : "");
             qty.setText(existing.has("quantity") ? existing.get("quantity").asText() : "");
             currency.setText(existing.has("currency") ? existing.get("currency").asText() : "TRY");
+        } else {
+            qty.setText("1");
+            curVal.setText("0");
+            purVal.setText("0");
         }
 
         g.add(newLabel("Varlık Adı"), 0, 0); g.add(name, 1, 0);
@@ -1356,13 +1430,20 @@ public class CepteFinansApp extends Application {
         save.setOnAction(e -> {
             String uid = requireCurrentUserId();
             if (uid == null) return;
+            if (name.getText().isBlank()) {
+                new Alert(Alert.AlertType.WARNING, "Varlık adı gerekli.").show();
+                return;
+            }
             try {
-                String json = String.format("{\"userId\":\"%s\",\"name\":\"%s\",\"type\":\"%s\",\"currentValue\":%s,\"purchaseValue\":%s,\"quantity\":%s,\"currency\":\"%s\"}",
-                    uid, name.getText(), type.getValue(), curVal.getText(), purVal.getText(), qty.getText(), currency.getText());
+                String json = toAssetJson(uid, name.getText(), type.getValue(),
+                        curVal.getText(), purVal.getText(), qty.getText(), currency.getText());
                 if (existing != null) ApiClient.put("/api/assets/" + existing.get("id").asText(), json);
                 else ApiClient.post("/api/assets", json);
-                d.close(); loadAssets();
-            } catch (Exception ex) {}
+                d.close();
+                loadAssets();
+            } catch (Exception ex) {
+                showApiError("Varlık kaydedilemedi", ex);
+            }
         });
         Button cancel = new Button("İptal"); cancel.getStyleClass().addAll("btn", "btn-ghost"); cancel.setOnAction(e -> d.close());
         HBox btns = new HBox(10, save, cancel);

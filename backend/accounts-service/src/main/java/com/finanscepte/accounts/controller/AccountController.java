@@ -30,11 +30,6 @@ public class AccountController {
         return ResponseEntity.ok(accountService.findAll());
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<AccountResponse> findById(@PathVariable String id) {
-        return ResponseEntity.ok(accountService.findById(id));
-    }
-
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<AccountResponse>> findByUserId(@PathVariable String userId) {
         return ResponseEntity.ok(accountService.findByUserId(userId));
@@ -45,6 +40,11 @@ public class AccountController {
             @PathVariable String userId,
             @PathVariable String type) {
         return ResponseEntity.ok(accountService.findByUserIdAndType(userId, type));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<AccountResponse> findById(@PathVariable String id) {
+        return ResponseEntity.ok(accountService.findById(id));
     }
 
     @PutMapping("/{id}")
