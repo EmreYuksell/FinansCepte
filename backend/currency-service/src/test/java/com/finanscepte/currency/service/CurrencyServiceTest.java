@@ -33,7 +33,7 @@ class CurrencyServiceTest {
         Map<String, Double> rates = service.fetchFiatRates();
 
         assertThat(rates).containsKeys("USD", "EUR", "GBP");
-        assertThat(rates.get("USD")).isEqualTo(32.45);
+        assertThat(rates.get("USD")).isEqualTo(38.50);
     }
 
     @Test

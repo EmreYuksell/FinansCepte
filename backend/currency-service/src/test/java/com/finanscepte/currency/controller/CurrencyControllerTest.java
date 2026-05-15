@@ -4,6 +4,7 @@ import com.finanscepte.currency.model.CurrencyRate;
 import com.finanscepte.currency.model.PriceAlert;
 import com.finanscepte.currency.repository.CurrencyRateRepository;
 import com.finanscepte.currency.repository.PriceAlertRepository;
+import com.finanscepte.currency.service.CurrencyUpdateService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -25,15 +26,27 @@ class CurrencyControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean private CurrencyRateRepository currencyRateRepository;
     @MockBean private PriceAlertRepository priceAlertRepository;
+    @MockBean private CurrencyUpdateService currencyUpdateService;
 
     @Test
     void getRates_shouldReturnList() throws Exception {
-        CurrencyRate rate = CurrencyRate.builder().symbol("USD").name("Dolar").rate(32.5).build();
+        CurrencyRate rate = CurrencyRate.builder().symbol("USD").name("USD/TRY").rate(32.5).type("FIAT").build();
         when(currencyRateRepository.findAll()).thenReturn(List.of(rate));
+        when(currencyUpdateService.isDataStale()).thenReturn(false);
 
         mockMvc.perform(get("/api/currency/rates"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].symbol").value("USD"));
+    }
+
+    @Test
+    void refreshRates_shouldReturnUpdatedList() throws Exception {
+        CurrencyRate rate = CurrencyRate.builder().symbol("BTC").name("BTC/TRY").rate(3_000_000).type("CRYPTO").build();
+        when(currencyRateRepository.findAll()).thenReturn(List.of(rate));
+
+        mockMvc.perform(post("/api/currency/rates/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].symbol").value("BTC"));
     }
 
     @Test

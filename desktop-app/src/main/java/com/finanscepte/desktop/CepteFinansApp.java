@@ -25,6 +25,7 @@ import javafx.stage.Stage;
 import java.io.File;
 import java.text.NumberFormat;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -1745,6 +1746,9 @@ public class CepteFinansApp extends Application {
         Label title = new Label("💱 Döviz & Kripto Piyasası");
         title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
 
+        Label lastUpdateLbl = new Label("Kurlar yükleniyor…");
+        lastUpdateLbl.setStyle("-fx-text-fill: #64748b; -fx-font-size: 12px;");
+
         // Cards row - dynamically filled
         HBox cards = new HBox(16);
         cards.setUserData("currencyCards");
@@ -1781,38 +1785,53 @@ public class CepteFinansApp extends Application {
         HBox toolbar = new HBox(10);
         toolbar.setAlignment(Pos.CENTER_LEFT);
         Button refresh = new Button("🔄 Yenile"); refresh.getStyleClass().addAll("btn", "btn-ghost");
-        refresh.setOnAction(e -> loadCurrency(cards, tbl, alarms));
+        refresh.setOnAction(e -> loadCurrency(cards, tbl, alarms, lastUpdateLbl));
         toolbar.getChildren().add(refresh);
 
         bottom.getChildren().addAll(tableBox, alarmBox);
 
-        root.getChildren().addAll(title, toolbar, cards, bottom);
+        root.getChildren().addAll(title, lastUpdateLbl, toolbar, cards, bottom);
 
-        loadCurrency(cards, tbl, alarms);
+        loadCurrency(cards, tbl, alarms, lastUpdateLbl);
         return root;
     }
 
-    private void loadCurrency(HBox cards, TableView<JsonNode> table, VBox alarms) {
+    private void loadCurrency(HBox cards, TableView<JsonNode> table, VBox alarms, Label lastUpdateLbl) {
         new Thread(() -> {
             try {
+                ApiClient.post("/api/currency/rates/refresh", "{}");
                 JsonNode[] rates = ApiClient.getJsonArray("/api/currency/rates");
-                JsonNode[] alerts = ApiClient.getJsonArray("/api/currency/alerts?userId=" + ApiClient.currentUserId);
+                String alertsPath = ApiClient.currentUserId != null && !ApiClient.currentUserId.isBlank()
+                        ? "/api/currency/alerts?userId=" + ApiClient.currentUserId
+                        : null;
+                JsonNode[] alerts = alertsPath != null ? ApiClient.getJsonArray(alertsPath) : new JsonNode[0];
                 Platform.runLater(() -> {
-                    // Cards
                     cards.getChildren().clear();
+                    LocalDateTime newest = null;
                     if (rates != null) {
                         for (JsonNode r : rates) {
                             String sym = r.get("symbol").asText();
                             double rate = r.get("rate").asDouble();
-                            double chg = r.get("changePercent24h").asDouble();
+                            boolean crypto = r.has("type") && "CRYPTO".equals(r.get("type").asText());
+                            double chg = r.has("changePercent24h") ? r.get("changePercent24h").asDouble() : 0;
                             boolean up = chg >= 0;
-                            String icon = "CRYPTO".equals(r.get("type").asText()) ? "₿ " : "💱 ";
-                            cards.getChildren().add(currencyCard(icon + sym + "/TRY", String.format("%.2f", rate), String.format("%.2f%%", chg), up));
+                            String icon = crypto ? "₿ " : "💱 ";
+                            String priceText = crypto && rate >= 1000
+                                    ? String.format("%,.0f ₺", rate)
+                                    : String.format("%,.2f ₺", rate);
+                            String chgText = crypto || chg != 0
+                                    ? String.format("%s%.2f%%", chg >= 0 ? "+" : "", chg)
+                                    : "Spot";
+                            cards.getChildren().add(currencyCard(icon + sym + "/TRY", priceText, chgText, up || !crypto));
+                            if (r.has("lastUpdated") && !r.get("lastUpdated").isNull()) {
+                                try {
+                                    LocalDateTime lu = LocalDateTime.parse(r.get("lastUpdated").asText().substring(0, 19));
+                                    if (newest == null || lu.isAfter(newest)) newest = lu;
+                                } catch (Exception ignored) {}
+                            }
                         }
                     }
-                    // Table
                     table.getItems().setAll(rates != null ? Arrays.asList(rates) : new ArrayList<>());
-                    // Alarms
                     alarms.getChildren().clear();
                     if (alerts != null) {
                         for (JsonNode a : alerts) {
@@ -1821,8 +1840,20 @@ public class CepteFinansApp extends Application {
                             alarms.getChildren().add(alarmRow(text, active ? "🟢 Aktif" : "🔴 Pasif", a.get("id").asText()));
                         }
                     }
+                    if (lastUpdateLbl != null) {
+                        if (newest != null) {
+                            lastUpdateLbl.setText("Son güncelleme: " + newest.format(
+                                    DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) + " · Binance & open.er-api.com");
+                        } else if (rates != null && rates.length > 0) {
+                            lastUpdateLbl.setText("Canlı kurlar yüklendi");
+                        } else {
+                            lastUpdateLbl.setText("Kur verisi alınamadı. Backend ve internet bağlantısını kontrol edin.");
+                        }
+                    }
                 });
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                showApiError("Döviz/kripto kurları yüklenemedi", e);
+            }
         }).start();
     }
 
@@ -2153,9 +2184,12 @@ public class CepteFinansApp extends Application {
             if(n == null || n.isNull()) return new javafx.beans.property.SimpleStringProperty("");
             if(n.isNumber()) {
                 double v = n.asDouble();
-                return new javafx.beans.property.SimpleStringProperty(
-                    prop.toLowerCase().contains("price") || prop.toLowerCase().contains("amount") ? tl.format(v) : String.format("%.0f", v)
-                );
+                String pl = prop.toLowerCase();
+                if (pl.contains("price") || pl.contains("amount") || pl.equals("rate")
+                        || pl.contains("24h") || pl.contains("balance")) {
+                    return new javafx.beans.property.SimpleStringProperty(tl.format(v));
+                }
+                return new javafx.beans.property.SimpleStringProperty(String.format("%.2f", v));
             }
             return new javafx.beans.property.SimpleStringProperty(n.asText());
         });

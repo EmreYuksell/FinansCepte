@@ -4,6 +4,7 @@ import com.finanscepte.currency.model.CurrencyRate;
 import com.finanscepte.currency.model.PriceAlert;
 import com.finanscepte.currency.repository.CurrencyRateRepository;
 import com.finanscepte.currency.repository.PriceAlertRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -14,43 +15,73 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class CurrencyUpdateService {
+
+    private static final String NOTIFICATION_URL = "http://notification-service:8086/api/notifications";
 
     private final CurrencyRateRepository currencyRateRepository;
     private final PriceAlertRepository priceAlertRepository;
     private final CurrencyApiService currencyApiService;
     private final RestTemplate restTemplate;
 
-    private static final String NOTIFICATION_URL = "http://notification-service:8086/api/notifications";
-
     public CurrencyUpdateService(CurrencyRateRepository currencyRateRepository,
                                  PriceAlertRepository priceAlertRepository,
-                                 CurrencyApiService currencyApiService) {
+                                 CurrencyApiService currencyApiService,
+                                 RestTemplate restTemplate) {
         this.currencyRateRepository = currencyRateRepository;
         this.priceAlertRepository = priceAlertRepository;
         this.currencyApiService = currencyApiService;
-        this.restTemplate = new RestTemplate();
+        this.restTemplate = restTemplate;
     }
 
-    @Scheduled(fixedRate = 300000)
-    public void updateRates() {
+    @PostConstruct
+    public void initRatesOnStartup() {
+        refreshRates();
+    }
+
+    @Scheduled(fixedRate = 120_000)
+    public void scheduledRefresh() {
+        refreshRates();
+    }
+
+    public void refreshRates() {
         Map<String, Double> fiatRates = currencyApiService.fetchFiatRates();
         for (Map.Entry<String, Double> entry : fiatRates.entrySet()) {
-            upsertRate(entry.getKey(), entry.getKey() + "/TRY", "FIAT", entry.getValue(), 0.0);
+            double rate = entry.getValue();
+            upsertRate(entry.getKey(), entry.getKey() + "/TRY", "FIAT", rate, 0.0, rate, rate);
         }
 
         Map<String, CurrencyApiService.CryptoRate> cryptoRates = currencyApiService.fetchCryptoRates();
         for (Map.Entry<String, CurrencyApiService.CryptoRate> entry : cryptoRates.entrySet()) {
             CurrencyApiService.CryptoRate cr = entry.getValue();
-            upsertRate(entry.getKey(), entry.getKey() + "/TRY", "CRYPTO", cr.price(), cr.changePercent24h());
+            double high = cr.high24h() > 0 ? cr.high24h() : cr.price();
+            double low = cr.low24h() > 0 ? cr.low24h() : cr.price();
+            upsertRate(entry.getKey(), entry.getKey() + "/TRY", "CRYPTO",
+                    cr.price(), cr.changePercent24h(), high, low);
         }
 
         checkPriceAlerts();
     }
 
-    private void upsertRate(String symbol, String name, String type, double rate, double changePercent) {
+    public boolean isDataStale() {
+        List<CurrencyRate> rates = currencyRateRepository.findAll();
+        if (rates.isEmpty()) {
+            return true;
+        }
+        LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
+        Optional<LocalDateTime> latest = rates.stream()
+                .map(CurrencyRate::getLastUpdated)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo);
+        return latest.map(l -> l.isBefore(threshold)).orElse(true);
+    }
+
+    private void upsertRate(String symbol, String name, String type, double rate,
+                            double changePercent, double high24h, double low24h) {
         CurrencyRate existing = currencyRateRepository.findBySymbol(symbol);
         if (existing == null) {
             existing = CurrencyRate.builder()
@@ -58,16 +89,16 @@ public class CurrencyUpdateService {
                     .name(name)
                     .rate(rate)
                     .changePercent24h(changePercent)
-                    .high24h(rate * 1.02)
-                    .low24h(rate * 0.98)
+                    .high24h(high24h)
+                    .low24h(low24h)
                     .lastUpdated(LocalDateTime.now())
                     .type(type)
                     .build();
         } else {
             existing.setRate(rate);
             existing.setChangePercent24h(changePercent);
-            existing.setHigh24h(Math.max(existing.getHigh24h(), rate));
-            existing.setLow24h(Math.min(existing.getLow24h(), rate));
+            existing.setHigh24h(high24h);
+            existing.setLow24h(low24h);
             existing.setLastUpdated(LocalDateTime.now());
         }
         currencyRateRepository.save(existing);
@@ -81,7 +112,9 @@ public class CurrencyUpdateService {
 
         for (PriceAlert alert : activeAlerts) {
             CurrencyRate rate = currencyRateRepository.findBySymbol(alert.getSymbol());
-            if (rate == null) continue;
+            if (rate == null) {
+                continue;
+            }
 
             boolean triggered = false;
             if ("ABOVE".equalsIgnoreCase(alert.getCondition()) && rate.getRate() >= alert.getTargetPrice()) {
