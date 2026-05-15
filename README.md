@@ -179,24 +179,3 @@ Tüm mikroservisler `common-lib` içindeki `GlobalExceptionHandler` ile standart
 | 401 | Yetkisiz (`UnauthorizedException`, örn. hatalı giriş) |
 | 404 | Kaynak bulunamadı |
 | 500 | Sunucu hatası |
-
-## Değerlendirme Kriterleri (TBL324)
-
-| Kriter | Puan | Durum | Karşılık |
-|--------|------|-------|----------|
-| API & Back-end | 10 | ✓ | 12 mikroservis + REST |
-| Generic Yapılar | 10 | ✓ | `GenericRepository<T,ID>`, `AbstractGenericDtoService` |
-| Custom GUI | 10 | ✓ | JavaFX + `FinancialGaugeCanvas` (Canvas API) |
-| JDBC & NoSQL | 10 | ✓ | MongoDB + `service-user-jpa` (H2/JDBC) |
-| SOLID & OOP | 10 | ✓ | Kalıplar + SOLID tablosu (aşağıda) |
-| Hata Yönetimi | 5 | ✓ | 4xx/5xx + `ApiErrorResponse` |
-| Performans Testleri | 5 | ✓ | k6 (`k6/load-test.js`) |
-| Analiz & Doküman | 5 | ✓ | README, Mermaid, Swagger |
-| **Zorunlu toplam** | **65** | ✓ | |
-| Mikroservis Mimarisi | +10 | ✓ | JSON/REST, izole servisler |
-| Gateway | +5 | ✓ | Spring Cloud Gateway |
-| Mobil GUI | +5 | — | **Kapsam dışı** (bilinçli olarak yok) |
-| Test-Driven Geliştirme | +10 | ✓ | JUnit/Mockito/WebMvcTest + servis testleri |
-| Dockerize Sistem | +5 | ✓ | `docker compose up -d --build` |
-| **Ek özellikler (mobil hariç)** | **+30** | ✓ | |
-| **Genel toplam (mobil hariç)** | **95** | | |
