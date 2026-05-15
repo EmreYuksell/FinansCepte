@@ -4,6 +4,7 @@ import com.finanscepte.accounts.dto.AccountRequest;
 import com.finanscepte.accounts.dto.AccountResponse;
 import com.finanscepte.accounts.service.AccountService;
 import com.finanscepte.common.exception.GlobalExceptionHandler;
+import com.finanscepte.common.exception.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,6 +61,16 @@ class AccountControllerTest {
                 .andExpect(status().isNoContent());
     }
     
+    @Test
+    void findById_shouldReturn404_whenNotFound() throws Exception {
+        when(accountService.findById("missing"))
+                .thenThrow(new ResourceNotFoundException("Account", "id", "missing"));
+
+        mockMvc.perform(get("/api/accounts/missing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
     @Test
     void create_shouldReturnCreated() throws Exception {
         AccountRequest req = new AccountRequest("u1", "Vadesiz", "BANK", "Ziraat", 1000, "TRY");
