@@ -50,6 +50,15 @@ class CurrencyControllerTest {
     }
 
     @Test
+    void getStatus_shouldReturnOk() throws Exception {
+        when(currencyUpdateService.getStatus()).thenReturn(java.util.Map.of("lastRefreshLive", true, "rateCount", 5));
+
+        mockMvc.perform(get("/api/currency/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lastRefreshLive").value(true));
+    }
+
+    @Test
     void refreshRates_shouldReturnUpdatedList_getQuery() throws Exception {
         CurrencyRate rate = CurrencyRate.builder().symbol("USD").name("USD/TRY").rate(38.5).type("FIAT").build();
         when(currencyRateRepository.findAll()).thenReturn(List.of(rate));

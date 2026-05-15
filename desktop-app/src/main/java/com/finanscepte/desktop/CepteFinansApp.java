@@ -57,6 +57,8 @@ public class CepteFinansApp extends Application {
     private ObservableList<JsonNode> accountList = FXCollections.observableArrayList();
     private ObservableList<JsonNode> assetList = FXCollections.observableArrayList();
     private ObservableList<JsonNode> goalList = FXCollections.observableArrayList();
+    private ObservableList<JsonNode> subscriptionList = FXCollections.observableArrayList();
+    private final Map<String, String> productNameById = new HashMap<>();
 
     // Dashboard refs
     private Label totalIncomeLbl, totalExpenseLbl, balanceLbl, budgetStatusLbl, savingsLbl, dailyAvgLbl;
@@ -392,6 +394,73 @@ public class CepteFinansApp extends Application {
         });
     }
 
+    private void loadProductNameCache() {
+        productNameById.clear();
+        try {
+            JsonNode[] products = ApiClient.getJsonArray("/api/products");
+            if (products != null) {
+                for (JsonNode p : products) {
+                    if (p.has("id")) {
+                        String name = p.has("name") ? p.get("name").asText() : p.get("id").asText();
+                        productNameById.put(p.get("id").asText(), name);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private String resolveProductName(JsonNode sub) {
+        if (sub != null && sub.has("productId")) {
+            String id = sub.get("productId").asText();
+            return productNameById.getOrDefault(id, id);
+        }
+        return "—";
+    }
+
+    private LocalDate parseApiDate(JsonNode node) {
+        if (node == null || node.isNull()) return null;
+        try {
+            String s = node.asText();
+            if (s.length() >= 10) return LocalDate.parse(s.substring(0, 10));
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private boolean isSubscriptionActiveInMonth(JsonNode sub, LocalDate monthStart, LocalDate monthEnd) {
+        if (sub == null) return false;
+        if (sub.has("status") && "CANCELLED".equalsIgnoreCase(sub.get("status").asText())) return false;
+        LocalDate start = parseApiDate(sub.get("startDate"));
+        LocalDate end = parseApiDate(sub.get("endDate"));
+        if (start == null || end == null) return false;
+        return !start.isAfter(monthEnd) && !end.isBefore(monthStart);
+    }
+
+    private void applySubscriptionExpenses(JsonNode[] subs, String curMonth, String prevMonth,
+                                           double[] expenseHolder, double[] prevExpenseHolder,
+                                           Map<String, Double> monthlyExpense,
+                                           Map<String, Double> catSpending) {
+        if (subs == null) return;
+        LocalDate curStart = LocalDate.parse(curMonth + "-01");
+        LocalDate curEnd = curStart.withDayOfMonth(curStart.lengthOfMonth());
+        LocalDate prevStart = LocalDate.parse(prevMonth + "-01");
+        LocalDate prevEnd = prevStart.withDayOfMonth(prevStart.lengthOfMonth());
+        for (JsonNode s : subs) {
+            double amt = s.has("amount") ? s.get("amount").asDouble() : 0;
+            if (amt <= 0) continue;
+            if (isSubscriptionActiveInMonth(s, curStart, curEnd)) {
+                expenseHolder[0] += amt;
+                monthlyExpense.merge(curMonth, amt, Double::sum);
+                String pname = resolveProductName(s);
+                String cat = "Abonelik: " + (pname.length() > 12 ? pname.substring(0, 12) : pname);
+                catSpending.merge(cat, amt, Double::sum);
+            }
+            if (isSubscriptionActiveInMonth(s, prevStart, prevEnd)) {
+                prevExpenseHolder[0] += amt;
+                monthlyExpense.merge(prevMonth, amt, Double::sum);
+            }
+        }
+    }
+
     // ================ MAIN APP ================
     private void showMain(String userId, String userName) {
         mainRoot = new BorderPane();
@@ -433,6 +502,7 @@ public class CepteFinansApp extends Application {
 
         addSidebarItem("dashboard", "📊", "Dashboard");
         addSidebarItem("transactions", "💳", "İşlemler");
+        addSidebarItem("subscriptions", "🔄", "Abonelikler");
         addSidebarItem("budgets", "📋", "Bütçeler");
         addSidebarItem("accounts", "🏦", "Hesaplar & Varlıklar");
         addSidebarItem("goals", "🎯", "Tasarruf Hedefleri");
@@ -497,6 +567,7 @@ public class CepteFinansApp extends Application {
         switch(id) {
             case "dashboard": contentArea.getChildren().add(buildDashboard()); break;
             case "transactions": contentArea.getChildren().add(buildTransactions()); break;
+            case "subscriptions": contentArea.getChildren().add(buildSubscriptions()); break;
             case "budgets": contentArea.getChildren().add(buildBudgets()); break;
             case "accounts": contentArea.getChildren().add(buildAccounts()); break;
             case "goals": contentArea.getChildren().add(buildGoals()); break;
@@ -716,6 +787,13 @@ public class CepteFinansApp extends Application {
             } catch (Exception ex) {
                 showApiError("Bildirimler yüklenemedi", ex);
             }
+            JsonNode[] subs = null;
+            try {
+                loadProductNameCache();
+                subs = ApiClient.getJsonArray(userListPath("subscriptions"));
+            } catch (Exception ex) {
+                showApiError("Abonelikler yüklenemedi", ex);
+            }
             try {
                 double income = 0, expense = 0;
                 Map<String, Double> catSpending = new HashMap<>();
@@ -747,6 +825,12 @@ public class CepteFinansApp extends Application {
                         dayCount++;
                     }
                 }
+
+                double[] subExpense = {0};
+                double[] subPrevExpense = {0};
+                applySubscriptionExpenses(subs, curMonth, prevMonth, subExpense, subPrevExpense, monthlyExpense, catSpending);
+                expense += subExpense[0];
+                prevExpense += subPrevExpense[0];
 
                 double balance = income - expense;
                 double savings = Math.max(0, income * 0.15);
@@ -1045,6 +1129,212 @@ public class CepteFinansApp extends Application {
         } catch (Exception e) {
             Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, "CSV hatası: " + e.getMessage()).show());
         }
+    }
+
+    // ================ SUBSCRIPTIONS ================
+    private VBox buildSubscriptions() {
+        VBox root = new VBox(16);
+        Label title = new Label("Abonelikler");
+        title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
+        Label hint = new Label("Aktif abonelik tutarları dashboard gider özetine aylık olarak eklenir. Aynı kalemi işlem olarak da eklerseniz çift sayılabilir.");
+        hint.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px; -fx-wrap-text: true;");
+        hint.setMaxWidth(700);
+
+        HBox bar = new HBox(10);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        Button addBtn = new Button("➕ Yeni Abonelik");
+        addBtn.getStyleClass().addAll("btn", "btn-primary");
+        addBtn.setOnAction(e -> showSubscriptionDialog(null));
+        Button refresh = new Button("🔄 Yenile");
+        refresh.getStyleClass().addAll("btn", "btn-ghost");
+        refresh.setOnAction(e -> loadSubscriptions());
+        bar.getChildren().addAll(addBtn, refresh);
+
+        Label summaryLbl = new Label("");
+        summaryLbl.setStyle("-fx-text-fill: #64748b; -fx-font-size: 13px;");
+
+        TableView<JsonNode> table = new TableView<>();
+        table.getStyleClass().add("table-view");
+        table.setItems(subscriptionList);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setPlaceholder(new Label("Abonelik bulunamadı"));
+
+        TableColumn<JsonNode, String> productCol = new TableColumn<>("Ürün / Hizmet");
+        productCol.setPrefWidth(180);
+        productCol.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(
+                resolveProductName(data.getValue())));
+
+        table.getColumns().addAll(
+                productCol,
+                col("Aylık Tutar", "amount", 110),
+                col("Başlangıç", "startDate", 120),
+                col("Bitiş", "endDate", 120),
+                col("Durum", "status", 90)
+        );
+
+        table.setRowFactory(tv -> {
+            TableRow<JsonNode> row = new TableRow<>();
+            row.setOnMouseClicked(e -> {
+                if (e.getClickCount() == 2 && !row.isEmpty()) showSubscriptionDialog(row.getItem());
+            });
+            return row;
+        });
+
+        ContextMenu cm = new ContextMenu();
+        MenuItem cancelItem = new MenuItem("İptal et");
+        cancelItem.setOnAction(e -> {
+            JsonNode sel = table.getSelectionModel().getSelectedItem();
+            if (sel != null) {
+                new Thread(() -> {
+                    try {
+                        ApiClient.patch("/api/subscriptions/" + sel.get("id").asText() + "/cancel");
+                        Platform.runLater(() -> { loadSubscriptions(); refreshDashboard(); });
+                    } catch (Exception ex) { showApiError("Abonelik iptal edilemedi", ex); }
+                }).start();
+            }
+        });
+        MenuItem delItem = new MenuItem("Sil");
+        delItem.setOnAction(e -> {
+            JsonNode sel = table.getSelectionModel().getSelectedItem();
+            if (sel != null) {
+                confirmDelete("Bu aboneliği silmek istediğinize emin misiniz?",
+                        "/api/subscriptions/", sel.get("id").asText(),
+                        () -> { loadSubscriptions(); refreshDashboard(); });
+            }
+        });
+        cm.getItems().addAll(cancelItem, delItem);
+        table.setContextMenu(cm);
+
+        root.getChildren().addAll(title, hint, bar, summaryLbl, table);
+        loadSubscriptions(summaryLbl);
+        return root;
+    }
+
+    private void loadSubscriptions() {
+        loadSubscriptions(null);
+    }
+
+    private void loadSubscriptions(Label summaryLbl) {
+        new Thread(() -> {
+            try {
+                loadProductNameCache();
+                JsonNode[] d = ApiClient.getJsonArray(userListPath("subscriptions"));
+                double monthlyActive = 0;
+                int activeCount = 0;
+                LocalDate today = LocalDate.now();
+                LocalDate monthStart = today.withDayOfMonth(1);
+                LocalDate monthEnd = today.withDayOfMonth(today.lengthOfMonth());
+                if (d != null) {
+                    for (JsonNode s : d) {
+                        if (isSubscriptionActiveInMonth(s, monthStart, monthEnd)) {
+                            activeCount++;
+                            monthlyActive += s.has("amount") ? s.get("amount").asDouble() : 0;
+                        }
+                    }
+                }
+                int finalActive = activeCount;
+                double finalMonthly = monthlyActive;
+                Platform.runLater(() -> {
+                    subscriptionList.setAll(d != null ? d : new JsonNode[0]);
+                    if (summaryLbl != null) {
+                        summaryLbl.setText(finalActive + " aktif abonelik · Bu ay toplam: " + tl.format(finalMonthly));
+                    }
+                });
+            } catch (Exception e) {
+                showApiError("Abonelikler yüklenemedi", e);
+            }
+        }).start();
+    }
+
+    private void showSubscriptionDialog(JsonNode existing) {
+        loadProductNameCache();
+        Stage d = dialogStage(existing != null ? "Abonelik Düzenle" : "Yeni Abonelik");
+        VBox root = new VBox(16);
+        root.getStyleClass().add("dialog-card");
+        root.setPadding(new Insets(24));
+        GridPane g = new GridPane();
+        g.setHgap(12);
+        g.setVgap(12);
+
+        ComboBox<String> productCombo = new ComboBox<>();
+        productCombo.getStyleClass().add("combo-box");
+        Map<String, String> idByLabel = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : productNameById.entrySet()) {
+            String label = e.getValue() + " (" + e.getKey().substring(0, Math.min(6, e.getKey().length())) + "…)";
+            idByLabel.put(label, e.getKey());
+            productCombo.getItems().add(label);
+        }
+        if (productCombo.getItems().isEmpty()) {
+            productCombo.getItems().add("(Önce ürün oluşturun — seed.ps1)");
+        } else {
+            productCombo.setValue(productCombo.getItems().get(0));
+        }
+
+        TextField amount = new TextField();
+        amount.setPromptText("Aylık tutar");
+        amount.getStyleClass().add("text-field");
+        DatePicker start = new DatePicker(LocalDate.now());
+        DatePicker end = new DatePicker(LocalDate.now().plusYears(1));
+
+        if (existing != null) {
+            String pid = existing.get("productId").asText();
+            productCombo.getItems().stream()
+                    .filter(l -> idByLabel.get(l) != null && idByLabel.get(l).equals(pid))
+                    .findFirst()
+                    .ifPresent(productCombo::setValue);
+            amount.setText(existing.has("amount") ? existing.get("amount").asText() : "");
+            LocalDate sd = parseApiDate(existing.get("startDate"));
+            LocalDate ed = parseApiDate(existing.get("endDate"));
+            if (sd != null) start.setValue(sd);
+            if (ed != null) end.setValue(ed);
+        }
+
+        g.add(newLabel("Ürün"), 0, 0);
+        g.add(productCombo, 1, 0);
+        g.add(newLabel("Aylık tutar"), 0, 1);
+        g.add(amount, 1, 1);
+        g.add(newLabel("Başlangıç"), 0, 2);
+        g.add(start, 1, 2);
+        g.add(newLabel("Bitiş"), 0, 3);
+        g.add(end, 1, 3);
+
+        Button save = new Button("💾 Kaydet");
+        save.getStyleClass().addAll("btn", "btn-primary");
+        save.setOnAction(e -> {
+            String uid = requireCurrentUserId();
+            if (uid == null) return;
+            String label = productCombo.getValue();
+            String productId = idByLabel.get(label);
+            if (productId == null || productId.isBlank()) {
+                new Alert(Alert.AlertType.WARNING, "Lütfen bir ürün seçin. Demo için seed.ps1 çalıştırın.").show();
+                return;
+            }
+            try {
+                ObjectNode body = mapper.createObjectNode();
+                body.put("userId", uid);
+                body.put("productId", productId);
+                body.put("amount", parseAmount(amount.getText()));
+                body.put("startDate", start.getValue().atStartOfDay().toString());
+                body.put("endDate", end.getValue().atStartOfDay().toString());
+                String json = mapper.writeValueAsString(body);
+                if (existing != null) {
+                    ApiClient.put("/api/subscriptions/" + existing.get("id").asText(), json);
+                } else {
+                    ApiClient.post("/api/subscriptions", json);
+                }
+                d.close();
+                loadSubscriptions();
+                refreshDashboard();
+            } catch (Exception ex) {
+                showApiError("Abonelik kaydedilemedi", ex);
+            }
+        });
+        Button cancel = new Button("İptal");
+        cancel.getStyleClass().addAll("btn", "btn-ghost");
+        cancel.setOnAction(e -> d.close());
+        root.getChildren().addAll(newLabel("Abonelik Bilgileri"), g, new HBox(10, save, cancel));
+        d.setScene(new Scene(root, 480, 400));
+        d.show();
     }
 
     // ================ BUDGETS ================
@@ -1921,11 +2211,18 @@ public class CepteFinansApp extends Application {
                         }
                     }
                     if (lastUpdateLbl != null) {
-                        if (newest != null) {
+                        boolean anyLive = rates != null && Arrays.stream(rates)
+                                .anyMatch(r -> r.has("live") && r.get("live").asBoolean());
+                        if (rates != null && rates.length > 0 && !anyLive) {
+                            lastUpdateLbl.setText("Canlı veri alınamadı; gösterilen kurlar yedektir. currency-service loglarını ve internet erişimini kontrol edin.");
+                            lastUpdateLbl.setStyle("-fx-text-fill: #d97706; -fx-font-size: 12px;");
+                        } else if (newest != null) {
+                            String src = rates != null && rates[0].has("source") ? rates[0].get("source").asText() : "API";
                             lastUpdateLbl.setText("Son güncelleme: " + newest.format(
-                                    DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) + " · Binance & open.er-api.com");
+                                    DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) + " · Canlı (" + src + ")");
+                            lastUpdateLbl.setStyle("-fx-text-fill: #64748b; -fx-font-size: 12px;");
                         } else if (rates != null && rates.length > 0) {
-                            lastUpdateLbl.setText("Canlı kurlar yüklendi");
+                            lastUpdateLbl.setText("Kurlar yüklendi");
                         } else {
                             lastUpdateLbl.setText("Kur verisi alınamadı. Backend ve internet bağlantısını kontrol edin.");
                         }

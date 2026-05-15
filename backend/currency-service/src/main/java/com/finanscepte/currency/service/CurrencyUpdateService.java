@@ -5,6 +5,8 @@ import com.finanscepte.currency.model.PriceAlert;
 import com.finanscepte.currency.repository.CurrencyRateRepository;
 import com.finanscepte.currency.repository.PriceAlertRepository;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -17,16 +19,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class CurrencyUpdateService {
 
+    private static final Logger log = LoggerFactory.getLogger(CurrencyUpdateService.class);
     private static final String NOTIFICATION_URL = "http://notification-service:8086/api/notifications";
 
     private final CurrencyRateRepository currencyRateRepository;
     private final PriceAlertRepository priceAlertRepository;
     private final CurrencyApiService currencyApiService;
     private final RestTemplate restTemplate;
+
+    private final AtomicReference<String> lastFiatSource = new AtomicReference<>("—");
+    private final AtomicReference<String> lastCryptoSource = new AtomicReference<>("—");
+    private final AtomicInteger lastLiveCount = new AtomicInteger(0);
+    private volatile boolean lastRefreshLive;
 
     public CurrencyUpdateService(CurrencyRateRepository currencyRateRepository,
                                  PriceAlertRepository priceAlertRepository,
@@ -49,29 +59,41 @@ public class CurrencyUpdateService {
     }
 
     public void refreshRates() {
-        Map<String, Double> fiatRates = currencyApiService.fetchFiatRates();
-        for (Map.Entry<String, Double> entry : fiatRates.entrySet()) {
+        AtomicInteger liveCount = new AtomicInteger(0);
+
+        CurrencyApiService.FetchResult<Map<String, Double>> fiatResult = currencyApiService.fetchFiatRates();
+        lastFiatSource.set(fiatResult.source());
+        for (Map.Entry<String, Double> entry : fiatResult.data().entrySet()) {
             double rate = entry.getValue();
-            upsertRate(entry.getKey(), entry.getKey() + "/TRY", "FIAT", rate, 0.0, rate, rate);
+            upsertRate(entry.getKey(), entry.getKey() + "/TRY", "FIAT", rate, 0.0, rate, rate,
+                    fiatResult.live(), fiatResult.source());
+            if (fiatResult.live()) liveCount.incrementAndGet();
         }
 
-        Map<String, CurrencyApiService.CryptoRate> cryptoRates = currencyApiService.fetchCryptoRates();
-        for (Map.Entry<String, CurrencyApiService.CryptoRate> entry : cryptoRates.entrySet()) {
+        CurrencyApiService.FetchResult<Map<String, CurrencyApiService.CryptoRate>> cryptoResult =
+                currencyApiService.fetchCryptoRates();
+        lastCryptoSource.set(cryptoResult.source());
+        for (Map.Entry<String, CurrencyApiService.CryptoRate> entry : cryptoResult.data().entrySet()) {
             CurrencyApiService.CryptoRate cr = entry.getValue();
             double high = cr.high24h() > 0 ? cr.high24h() : cr.price();
             double low = cr.low24h() > 0 ? cr.low24h() : cr.price();
             upsertRate(entry.getKey(), entry.getKey() + "/TRY", "CRYPTO",
-                    cr.price(), cr.changePercent24h(), high, low);
+                    cr.price(), cr.changePercent24h(), high, low,
+                    cryptoResult.live(), cryptoResult.source());
+            if (cryptoResult.live()) liveCount.incrementAndGet();
         }
+
+        lastLiveCount.set(liveCount.get());
+        lastRefreshLive = fiatResult.live() || cryptoResult.live();
+        log.info("Rates refreshed: fiat={} (live={}), crypto={} (live={}), liveSymbols={}",
+                fiatResult.source(), fiatResult.live(), cryptoResult.source(), cryptoResult.live(), liveCount.get());
 
         checkPriceAlerts();
     }
 
     public boolean isDataStale() {
         List<CurrencyRate> rates = currencyRateRepository.findAll();
-        if (rates.isEmpty()) {
-            return true;
-        }
+        if (rates.isEmpty()) return true;
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(10);
         Optional<LocalDateTime> latest = rates.stream()
                 .map(CurrencyRate::getLastUpdated)
@@ -80,8 +102,20 @@ public class CurrencyUpdateService {
         return latest.map(l -> l.isBefore(threshold)).orElse(true);
     }
 
+    public Map<String, Object> getStatus() {
+        return Map.of(
+                "lastRefreshLive", lastRefreshLive,
+                "fiatSource", lastFiatSource.get(),
+                "cryptoSource", lastCryptoSource.get(),
+                "liveSymbolCount", lastLiveCount.get(),
+                "rateCount", currencyRateRepository.findAll().size(),
+                "stale", isDataStale()
+        );
+    }
+
     private void upsertRate(String symbol, String name, String type, double rate,
-                            double changePercent, double high24h, double low24h) {
+                            double changePercent, double high24h, double low24h,
+                            boolean live, String source) {
         CurrencyRate existing = currencyRateRepository.findBySymbol(symbol);
         if (existing == null) {
             existing = CurrencyRate.builder()
@@ -93,6 +127,8 @@ public class CurrencyUpdateService {
                     .low24h(low24h)
                     .lastUpdated(LocalDateTime.now())
                     .type(type)
+                    .live(live)
+                    .source(source)
                     .build();
         } else {
             existing.setRate(rate);
@@ -100,6 +136,8 @@ public class CurrencyUpdateService {
             existing.setHigh24h(high24h);
             existing.setLow24h(low24h);
             existing.setLastUpdated(LocalDateTime.now());
+            existing.setLive(live);
+            existing.setSource(source);
         }
         currencyRateRepository.save(existing);
     }
@@ -112,9 +150,7 @@ public class CurrencyUpdateService {
 
         for (PriceAlert alert : activeAlerts) {
             CurrencyRate rate = currencyRateRepository.findBySymbol(alert.getSymbol());
-            if (rate == null) {
-                continue;
-            }
+            if (rate == null) continue;
 
             boolean triggered = false;
             if ("ABOVE".equalsIgnoreCase(alert.getCondition()) && rate.getRate() >= alert.getTargetPrice()) {

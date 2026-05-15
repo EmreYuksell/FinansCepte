@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/currency")
@@ -43,6 +44,11 @@ public class CurrencyController {
     public ResponseEntity<List<CurrencyRate>> refreshRates() {
         currencyUpdateService.refreshRates();
         return ResponseEntity.ok(sortedRates(currencyRateRepository.findAll()));
+    }
+
+    @GetMapping("/status")
+    public ResponseEntity<Map<String, Object>> getStatus() {
+        return ResponseEntity.ok(currencyUpdateService.getStatus());
     }
 
     @GetMapping("/rates/{symbol}")

@@ -22,26 +22,29 @@ class CurrencyServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CurrencyApiService();
-        ReflectionTestUtils.setField(service, "restTemplate", restTemplate);
+        service = new CurrencyApiService(restTemplate);
     }
 
     @Test
     void fetchFiatRates_shouldUseFallback_whenApiFails() {
         when(restTemplate.getForObject(anyString(), eq(Map.class))).thenThrow(new RuntimeException("offline"));
 
-        Map<String, Double> rates = service.fetchFiatRates();
+        CurrencyApiService.FetchResult<Map<String, Double>> result = service.fetchFiatRates();
 
-        assertThat(rates).containsKeys("USD", "EUR", "GBP");
-        assertThat(rates.get("USD")).isEqualTo(38.50);
+        assertThat(result.live()).isFalse();
+        assertThat(result.source()).isEqualTo("FALLBACK");
+        assertThat(result.data()).containsKeys("USD", "EUR", "GBP");
+        assertThat(result.data().get("USD")).isEqualTo(38.50);
     }
 
     @Test
     void fetchCryptoRates_shouldUseFallback_whenApiFails() {
         when(restTemplate.getForObject(anyString(), eq(Map.class))).thenThrow(new RuntimeException("offline"));
+        when(restTemplate.getForObject(contains("symbol="), eq(Map.class))).thenThrow(new RuntimeException("offline"));
 
-        Map<String, CurrencyApiService.CryptoRate> rates = service.fetchCryptoRates();
+        CurrencyApiService.FetchResult<Map<String, CurrencyApiService.CryptoRate>> result = service.fetchCryptoRates();
 
-        assertThat(rates).containsKeys("BTC", "ETH", "XRP");
+        assertThat(result.live()).isFalse();
+        assertThat(result.data()).containsKeys("BTC", "ETH", "XRP");
     }
 }

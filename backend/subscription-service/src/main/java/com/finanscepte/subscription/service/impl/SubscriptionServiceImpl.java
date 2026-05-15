@@ -34,6 +34,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public SubscriptionResponse update(String id, SubscriptionRequest request) {
         Subscription existing = subscriptionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Subscription", "id", id));
+        existing.setProductId(request.productId());
         existing.setStartDate(request.startDate());
         existing.setEndDate(request.endDate());
         existing.setAmount(request.amount());

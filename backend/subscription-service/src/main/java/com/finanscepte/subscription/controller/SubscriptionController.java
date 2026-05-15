@@ -38,14 +38,14 @@ public class SubscriptionController {
         return ResponseEntity.ok(subscriptionService.findAll());
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<SubscriptionResponse> findById(@PathVariable String id) {
-        return ResponseEntity.ok(subscriptionService.findById(id));
-    }
-
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<SubscriptionResponse>> findByUserId(@PathVariable String userId) {
         return ResponseEntity.ok(subscriptionService.findByUserId(userId));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<SubscriptionResponse> findById(@PathVariable String id) {
+        return ResponseEntity.ok(subscriptionService.findById(id));
     }
 
     @PutMapping("/{id}")

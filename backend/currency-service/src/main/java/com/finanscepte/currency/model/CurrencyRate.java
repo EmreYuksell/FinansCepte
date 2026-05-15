@@ -25,4 +25,6 @@ public class CurrencyRate {
     private double low24h;
     private LocalDateTime lastUpdated;
     private String type; // FIAT / CRYPTO
+    private boolean live;
+    private String source;
 }
