@@ -53,19 +53,36 @@ public class ApiClient {
 
     public static String put(String path, String jsonBody) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + path))
-                .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString(jsonBody));
+                .uri(URI.create(BASE_URL + path));
+        if (jsonBody != null && !jsonBody.isBlank()) {
+            builder.header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(jsonBody));
+        } else {
+            builder.PUT(HttpRequest.BodyPublishers.noBody());
+        }
         if (authToken != null) builder.header("Authorization", "Bearer " + authToken);
         HttpResponse<String> r = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         checkError(r);
         return r.body();
     }
 
+    public static void put(String path) throws Exception {
+        put(path, null);
+    }
+
     public static void patch(String path) throws Exception {
+        patch(path, null);
+    }
+
+    public static void patch(String path, String jsonBody) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + path))
-                .method("PATCH", HttpRequest.BodyPublishers.noBody());
+                .uri(URI.create(BASE_URL + path));
+        if (jsonBody != null && !jsonBody.isBlank()) {
+            builder.header("Content-Type", "application/json")
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString(jsonBody));
+        } else {
+            builder.method("PATCH", HttpRequest.BodyPublishers.noBody());
+        }
         if (authToken != null) builder.header("Authorization", "Bearer " + authToken);
         HttpResponse<String> r = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         checkError(r);

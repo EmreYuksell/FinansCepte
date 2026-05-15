@@ -138,6 +138,8 @@ public class CepteFinansApp extends Application {
         remember.setTextFill(Color.web("#888"));
         Hyperlink forgot = new Hyperlink("Şifremi unuttum");
         forgot.setTextFill(Color.web("#4f46e5"));
+        forgot.setOnAction(e -> new Alert(Alert.AlertType.INFORMATION,
+                "Şifre sıfırlama bu sürümde yok. Yeni hesap için «Kayıt Ol» kullanın veya mevcut şifrenizle giriş yapın.").show());
         extra.getChildren().addAll(remember, forgot);
 
         HBox registerRow = new HBox(6);
@@ -286,6 +288,24 @@ public class CepteFinansApp extends Application {
             return "Bilinmeyen bir hata oluştu. Backend bağlantısını kontrol edin.";
         }
         return errMsg;
+    }
+
+    private String userListPath(String resource) {
+        if (ApiClient.currentUserId != null && !ApiClient.currentUserId.isBlank()) {
+            return "/api/" + resource + "/user/" + ApiClient.currentUserId;
+        }
+        return "/api/" + resource;
+    }
+
+    private void fillUserId(TextField userId) {
+        if (ApiClient.currentUserId != null && !ApiClient.currentUserId.isBlank()) {
+            userId.setText(ApiClient.currentUserId);
+            userId.setEditable(false);
+        }
+    }
+
+    private void showApiError(String action, Exception ex) {
+        Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, action + ": " + formatError(ex)).show());
     }
 
     // ================ MAIN APP ================
@@ -595,9 +615,9 @@ public class CepteFinansApp extends Application {
     private void refreshDashboard() {
         new Thread(() -> {
             try {
-                JsonNode[] tx = ApiClient.get("/api/transactions", JsonNode[].class);
-                JsonNode[] bg = ApiClient.get("/api/budgets", JsonNode[].class);
-                JsonNode[] nf = ApiClient.get("/api/notifications", JsonNode[].class);
+                JsonNode[] tx = ApiClient.get(userListPath("transactions"), JsonNode[].class);
+                JsonNode[] bg = ApiClient.get(userListPath("budgets"), JsonNode[].class);
+                JsonNode[] nf = ApiClient.get(userListPath("notifications"), JsonNode[].class);
 
                 double income = 0, expense = 0;
                 Map<String, Double> catSpending = new HashMap<>();
@@ -826,7 +846,7 @@ public class CepteFinansApp extends Application {
     private void loadTransactions(String typeFilter, String search, LocalDate from, LocalDate to, Label totalLbl, Label countLbl) {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get("/api/transactions", JsonNode[].class);
+                JsonNode[] d = ApiClient.get(userListPath("transactions"), JsonNode[].class);
                 List<JsonNode> list = d != null ? Arrays.asList(d) : new ArrayList<>();
                 if(!"Tümü".equals(typeFilter)) {
                     list = list.stream().filter(n -> n.get("type").asText().equalsIgnoreCase(typeFilter)).collect(Collectors.toList());
@@ -860,6 +880,7 @@ public class CepteFinansApp extends Application {
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
 
         TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
+        fillUserId(userId);
         TextField amount = new TextField(); amount.setPromptText("0,00"); amount.getStyleClass().add("text-field");
         ComboBox<String> typeCb = new ComboBox<>(FXCollections.observableArrayList("GELIR", "GIDER")); typeCb.setValue("GELIR"); typeCb.getStyleClass().add("combo-box");
         TextField desc = new TextField(); desc.setPromptText("Açıklama / Kategori"); desc.getStyleClass().add("text-field");
@@ -867,7 +888,7 @@ public class CepteFinansApp extends Application {
         TextField tags = new TextField(); tags.setPromptText("Etiketler (virgülle)"); tags.getStyleClass().add("text-field");
 
         if(existing != null) {
-            userId.setText(existing.get("userId").asText());
+            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             amount.setText(existing.get("amount").asText());
             typeCb.setValue(existing.get("type").asText());
             desc.setText(existing.has("description") ? existing.get("description").asText() : "");
@@ -883,12 +904,21 @@ public class CepteFinansApp extends Application {
         Button save = new Button("💾 Kaydet"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
             try {
-                String json = String.format("{\"userId\":\"%s\",\"amount\":%s,\"type\":\"%s\",\"description\":\"%s\"}",
-                    userId.getText(), amount.getText(), typeCb.getValue(), desc.getText());
-                ApiClient.post("/api/transactions", json); d.close();
+                ObjectNode body = mapper.createObjectNode();
+                body.put("userId", userId.getText().trim());
+                body.put("amount", new java.math.BigDecimal(amount.getText().trim().replace(",", ".")));
+                body.put("type", typeCb.getValue());
+                body.put("description", desc.getText().trim());
+                String json = mapper.writeValueAsString(body);
+                if (existing != null) {
+                    ApiClient.put("/api/transactions/" + existing.get("id").asText(), json);
+                } else {
+                    ApiClient.post("/api/transactions", json);
+                }
+                d.close();
                 if(contentArea.getChildren().get(0) instanceof VBox) showPage("transactions");
                 else refreshDashboard();
-            } catch (Exception ex) { ex.printStackTrace(); }
+            } catch (Exception ex) { showApiError("İşlem kaydedilemedi", ex); }
         });
 
         Button cancel = new Button("İptal"); cancel.getStyleClass().addAll("btn", "btn-ghost");
@@ -1016,7 +1046,7 @@ public class CepteFinansApp extends Application {
 
     private void loadBudgets() {
         new Thread(() -> {
-            try { JsonNode[] d = ApiClient.get("/api/budgets", JsonNode[].class); Platform.runLater(() -> budgetList.setAll(d != null ? d : new JsonNode[0])); }
+            try { JsonNode[] d = ApiClient.get(userListPath("budgets"), JsonNode[].class); Platform.runLater(() -> budgetList.setAll(d != null ? d : new JsonNode[0])); }
             catch (Exception e) {}
         }).start();
     }
@@ -1026,13 +1056,14 @@ public class CepteFinansApp extends Application {
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
         TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
+        fillUserId(userId);
         TextField cat = new TextField(); cat.setPromptText("Kategori"); cat.getStyleClass().add("text-field");
         TextField limit = new TextField(); limit.setPromptText("Limit"); limit.getStyleClass().add("text-field");
         TextField month = new TextField(); month.setPromptText("Ay (1-12)"); month.getStyleClass().add("text-field");
         TextField year = new TextField(); year.setPromptText("Yıl"); year.getStyleClass().add("text-field");
 
         if (existing != null) {
-            userId.setText(existing.has("userId") ? existing.get("userId").asText() : "");
+            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             cat.setText(existing.has("category") ? existing.get("category").asText() : "");
             limit.setText(existing.has("limitAmount") ? existing.get("limitAmount").asText() : "");
             month.setText(existing.has("month") ? existing.get("month").asText() : "");
@@ -1172,7 +1203,7 @@ public class CepteFinansApp extends Application {
     private void loadAccounts() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get("/api/accounts", JsonNode[].class);
+                JsonNode[] d = ApiClient.get(userListPath("accounts"), JsonNode[].class);
                 Platform.runLater(() -> accountList.setAll(d != null ? d : new JsonNode[0]));
             } catch (Exception e) {}
         }).start();
@@ -1181,7 +1212,7 @@ public class CepteFinansApp extends Application {
     private void loadAssets() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get("/api/assets", JsonNode[].class);
+                JsonNode[] d = ApiClient.get(userListPath("assets"), JsonNode[].class);
                 Platform.runLater(() -> {
                     assetList.setAll(d != null ? d : new JsonNode[0]);
                     // Update pie chart
@@ -1210,6 +1241,7 @@ public class CepteFinansApp extends Application {
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
         TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
+        fillUserId(userId);
         TextField name = new TextField(); name.setPromptText("Hesap adı"); name.getStyleClass().add("text-field");
         ComboBox<String> type = new ComboBox<>(FXCollections.observableArrayList("VADESIZ", "BIRIKIM", "YATIRIM", "KREDI_KARTI"));
         type.setValue("VADESIZ"); type.getStyleClass().add("combo-box");
@@ -1218,7 +1250,7 @@ public class CepteFinansApp extends Application {
         TextField currency = new TextField(); currency.setPromptText("TRY"); currency.setText("TRY"); currency.getStyleClass().add("text-field");
 
         if (existing != null) {
-            userId.setText(existing.has("userId") ? existing.get("userId").asText() : "");
+            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             name.setText(existing.has("name") ? existing.get("name").asText() : "");
             type.setValue(existing.has("type") ? existing.get("type").asText() : "VADESIZ");
             institution.setText(existing.has("institution") ? existing.get("institution").asText() : "");
@@ -1254,6 +1286,7 @@ public class CepteFinansApp extends Application {
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
         TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
+        fillUserId(userId);
         TextField name = new TextField(); name.setPromptText("Varlık adı"); name.getStyleClass().add("text-field");
         ComboBox<String> type = new ComboBox<>(FXCollections.observableArrayList("HISSE", "KRIPTO", "ALTIN", "DOVIZ", "DIGER"));
         type.setValue("HISSE"); type.getStyleClass().add("combo-box");
@@ -1263,7 +1296,7 @@ public class CepteFinansApp extends Application {
         TextField currency = new TextField(); currency.setPromptText("TRY"); currency.setText("TRY"); currency.getStyleClass().add("text-field");
 
         if (existing != null) {
-            userId.setText(existing.has("userId") ? existing.get("userId").asText() : "");
+            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             name.setText(existing.has("name") ? existing.get("name").asText() : "");
             type.setValue(existing.has("type") ? existing.get("type").asText() : "HISSE");
             curVal.setText(existing.has("currentValue") ? existing.get("currentValue").asText() : "");
@@ -1382,7 +1415,7 @@ public class CepteFinansApp extends Application {
     private void loadGoals(Label totalTargetLbl, Label totalCurrentLbl, Label totalRemainingLbl, Label activeCountLbl, FlowPane goalsPane) {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get("/api/goals", JsonNode[].class);
+                JsonNode[] d = ApiClient.get(userListPath("goals"), JsonNode[].class);
                 List<JsonNode> list = d != null ? Arrays.asList(d) : new ArrayList<>();
                 double totalTarget = list.stream().mapToDouble(n -> n.get("targetAmount").asDouble()).sum();
                 double totalCurrent = list.stream().mapToDouble(n -> n.get("currentAmount").asDouble()).sum();
@@ -1440,10 +1473,11 @@ public class CepteFinansApp extends Application {
         Button save = new Button("💾 Ekle"); save.getStyleClass().addAll("btn", "btn-primary");
         save.setOnAction(e -> {
             try {
-                String json = String.format("{\"amount\":%s}", amount.getText());
-                ApiClient.patch("/api/goals/" + goalId + "/deposit");
+                ObjectNode body = mapper.createObjectNode();
+                body.put("amount", Double.parseDouble(amount.getText().trim().replace(",", ".")));
+                ApiClient.patch("/api/goals/" + goalId + "/deposit", mapper.writeValueAsString(body));
                 d.close(); showPage("goals");
-            } catch (Exception ex) {}
+            } catch (Exception ex) { showApiError("Para eklenemedi", ex); }
         });
         Button cancel = new Button("İptal"); cancel.getStyleClass().addAll("btn", "btn-ghost"); cancel.setOnAction(e -> d.close());
         root.getChildren().addAll(newLabel("Eklenecek Tutar"), amount, new HBox(10, save, cancel));
@@ -1455,6 +1489,7 @@ public class CepteFinansApp extends Application {
         VBox root = new VBox(16); root.getStyleClass().add("dialog-card"); root.setPadding(new Insets(24));
         GridPane g = new GridPane(); g.setHgap(12); g.setVgap(12);
         TextField userId = new TextField(); userId.setPromptText("Kullanıcı ID"); userId.getStyleClass().add("text-field");
+        fillUserId(userId);
         TextField name = new TextField(); name.setPromptText("Hedef adı"); name.getStyleClass().add("text-field");
         TextField target = new TextField(); target.setPromptText("Hedef tutar"); target.getStyleClass().add("text-field");
         TextField current = new TextField(); current.setPromptText("Mevcut birikim"); current.getStyleClass().add("text-field");
@@ -1464,7 +1499,7 @@ public class CepteFinansApp extends Application {
         TextField category = new TextField(); category.setPromptText("Kategori"); category.getStyleClass().add("text-field");
 
         if (existing != null) {
-            userId.setText(existing.has("userId") ? existing.get("userId").asText() : "");
+            if (existing.has("userId")) userId.setText(existing.get("userId").asText());
             name.setText(existing.has("name") ? existing.get("name").asText() : "");
             target.setText(existing.has("targetAmount") ? existing.get("targetAmount").asText() : "");
             current.setText(existing.has("currentAmount") ? existing.get("currentAmount").asText() : "");
@@ -1794,7 +1829,7 @@ public class CepteFinansApp extends Application {
         Label s = new Label(status); s.setStyle("-fx-text-fill: " + (status.contains("Aktif") ? "#10b981" : "#4f46e5") + "; -fx-font-size: 12px;");
         Button toggle = new Button("🔄"); toggle.setStyle("-fx-font-size: 10px; -fx-background-color: transparent;");
         toggle.setOnAction(e -> {
-            new Thread(() -> { try { ApiClient.put("/api/currency/alerts/" + alertId + "/toggle", ""); Platform.runLater(() -> showPage("currency")); } catch (Exception ex) {} }).start();
+            new Thread(() -> { try { ApiClient.put("/api/currency/alerts/" + alertId + "/toggle"); Platform.runLater(() -> showPage("currency")); } catch (Exception ex) { showApiError("Alarm güncellenemedi", ex); } }).start();
         });
         Button del = new Button("🗑️"); del.setStyle("-fx-font-size: 10px; -fx-background-color: transparent;");
         del.setOnAction(e -> confirmDelete("Bu alarmı silmek istiyor musunuz?", "/api/currency/alerts/", alertId, () -> showPage("currency")));
@@ -1839,10 +1874,10 @@ public class CepteFinansApp extends Application {
         });
 
         markAll.setOnAction(e -> new Thread(() -> { try {
-            JsonNode[] d = ApiClient.get("/api/notifications", JsonNode[].class);
+            JsonNode[] d = ApiClient.get(userListPath("notifications"), JsonNode[].class);
             if(d != null) for(JsonNode n : d) if(!n.get("read").asBoolean()) ApiClient.patch("/api/notifications/" + n.get("id").asText() + "/read");
             Platform.runLater(this::loadNotifications);
-        } catch(Exception ex){} }).start());
+        } catch(Exception ex){ showApiError("Bildirimler güncellenemedi", ex); } }).start());
 
         refresh.setOnAction(e -> loadNotifications());
         loadNotifications();
@@ -1854,7 +1889,7 @@ public class CepteFinansApp extends Application {
     private void loadNotifications() {
         new Thread(() -> {
             try {
-                JsonNode[] d = ApiClient.get("/api/notifications", JsonNode[].class);
+                JsonNode[] d = ApiClient.get(userListPath("notifications"), JsonNode[].class);
                 Platform.runLater(() -> { notifList.setAll(d != null ? d : new JsonNode[0]); });
                 long unread = d != null ? Arrays.stream(d).filter(n -> !n.get("read").asBoolean()).count() : 0;
                 Platform.runLater(() -> {
@@ -2045,11 +2080,10 @@ public class CepteFinansApp extends Application {
             // Save to API
             new Thread(() -> {
                 try {
-                    String json = settings.toString();
-                    // Simple replace - not ideal but works for demo
-                    String newJson = json.replace("\"" + field + "\":" + !sel, "\"" + field + "\":" + sel);
-                    ApiClient.put("/api/settings", newJson);
-                } catch (Exception ex) {}
+                    ObjectNode updated = settings.deepCopy();
+                    updated.put(field, sel);
+                    ApiClient.put("/api/settings", mapper.writeValueAsString(updated));
+                } catch (Exception ex) { showApiError("Ayar kaydedilemedi", ex); }
             }).start();
         });
         h.getChildren().addAll(l, tb);
