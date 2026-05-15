@@ -69,17 +69,12 @@ public class UserController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        try {
-            UserResponse user = userService.login(request);
-            return ResponseEntity.ok(Map.of(
-                    "id", user.id(),
-                    "name", user.name(),
-                    "email", user.email()
-            ));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", e.getMessage()));
-        }
+    public ResponseEntity<Map<String, String>> login(@Valid @RequestBody LoginRequest request) {
+        UserResponse user = userService.login(request);
+        return ResponseEntity.ok(Map.of(
+                "id", user.id(),
+                "name", user.name(),
+                "email", user.email()
+        ));
     }
 }

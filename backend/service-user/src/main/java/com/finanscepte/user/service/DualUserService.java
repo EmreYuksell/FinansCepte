@@ -1,6 +1,7 @@
 package com.finanscepte.user.service;
 
 import com.finanscepte.common.exception.ResourceNotFoundException;
+import com.finanscepte.common.exception.UnauthorizedException;
 import com.finanscepte.user.dto.LoginRequest;
 import com.finanscepte.user.dto.UserRequest;
 import com.finanscepte.user.dto.UserResponse;
@@ -85,9 +86,9 @@ public class DualUserService implements UserService {
     public UserResponse login(LoginRequest request) {
         if (isJpaMode()) {
             UserJpaEntity entity = userJpaRepository.findByEmail(request.email())
-                    .orElseThrow(() -> new RuntimeException("E-posta veya şifre hatalı"));
+                    .orElseThrow(() -> new UnauthorizedException("E-posta veya şifre hatalı"));
             if (!passwordEncoder.matches(request.password(), entity.getPassword())) {
-                throw new RuntimeException("E-posta veya şifre hatalı");
+                throw new UnauthorizedException("E-posta veya şifre hatalı");
             }
             return new UserResponse(
                     entity.getId().toString(),
@@ -98,9 +99,9 @@ public class DualUserService implements UserService {
             );
         } else {
             User user = userMongoRepository.findByEmail(request.email())
-                    .orElseThrow(() -> new RuntimeException("E-posta veya şifre hatalı"));
+                    .orElseThrow(() -> new UnauthorizedException("E-posta veya şifre hatalı"));
             if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-                throw new RuntimeException("E-posta veya şifre hatalı");
+                throw new UnauthorizedException("E-posta veya şifre hatalı");
             }
             return userMapper.toResponse(user);
         }

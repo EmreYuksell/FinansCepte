@@ -1,6 +1,8 @@
 package com.finanscepte.user.service;
 
 import com.finanscepte.common.exception.ResourceNotFoundException;
+import com.finanscepte.common.exception.UnauthorizedException;
+import com.finanscepte.user.dto.LoginRequest;
 import com.finanscepte.user.dto.UserRequest;
 import com.finanscepte.user.dto.UserResponse;
 import com.finanscepte.user.model.User;
@@ -56,5 +58,14 @@ class DualUserServiceTest {
         Optional<UserResponse> result = dualUserService.findById("1");
         assertThat(result).isPresent();
         assertThat(result.get().name()).isEqualTo("Test");
+    }
+
+    @Test
+    void login_shouldThrowUnauthorized_whenPasswordWrong() {
+        User user = User.builder().email("a@b.com").password("$2a$10$encoded").build();
+        when(userMongoRepository.findByEmail("a@b.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> dualUserService.login(new LoginRequest("a@b.com", "yanlis")))
+                .isInstanceOf(UnauthorizedException.class);
     }
 }

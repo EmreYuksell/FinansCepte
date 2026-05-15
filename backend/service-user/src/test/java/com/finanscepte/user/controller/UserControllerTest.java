@@ -2,6 +2,8 @@ package com.finanscepte.user.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finanscepte.common.exception.GlobalExceptionHandler;
+import com.finanscepte.common.exception.UnauthorizedException;
+import com.finanscepte.user.dto.LoginRequest;
 import com.finanscepte.user.dto.UserRequest;
 import com.finanscepte.user.dto.UserResponse;
 import com.finanscepte.user.service.UserService;
@@ -67,5 +69,30 @@ class UserControllerTest {
     void createInvalid_shouldReturn400() throws Exception {
         mockMvc.perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"\",\"email\":\"invalid\",\"password\":\"\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void login_shouldReturn200_whenValid() throws Exception {
+        LoginRequest req = new LoginRequest("test@mail.com", "123456");
+        UserResponse resp = new UserResponse("1", "Test", "test@mail.com", LocalDateTime.now(), LocalDateTime.now());
+        when(userService.login(any())).thenReturn(resp);
+
+        mockMvc.perform(post("/api/users/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("test@mail.com"));
+    }
+
+    @Test
+    void login_shouldReturn401_whenInvalid() throws Exception {
+        LoginRequest req = new LoginRequest("test@mail.com", "wrong");
+        when(userService.login(any())).thenThrow(new UnauthorizedException("E-posta veya şifre hatalı"));
+
+        mockMvc.perform(post("/api/users/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
     }
 }
