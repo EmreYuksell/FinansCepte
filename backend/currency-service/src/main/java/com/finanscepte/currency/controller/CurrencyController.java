@@ -38,6 +38,7 @@ public class CurrencyController {
         return ResponseEntity.ok(sortedRates(currencyRateRepository.findAll()));
     }
 
+    @GetMapping("/rates/refresh")
     @PostMapping("/rates/refresh")
     public ResponseEntity<List<CurrencyRate>> refreshRates() {
         currencyUpdateService.refreshRates();

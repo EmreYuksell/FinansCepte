@@ -1880,8 +1880,7 @@ public class CepteFinansApp extends Application {
     private void loadCurrency(HBox cards, TableView<JsonNode> table, VBox alarms, Label lastUpdateLbl) {
         new Thread(() -> {
             try {
-                ApiClient.post("/api/currency/rates/refresh", "{}");
-                JsonNode[] rates = ApiClient.getJsonArray("/api/currency/rates");
+                JsonNode[] rates = ApiClient.getJsonArray("/api/currency/rates?refresh=true");
                 String alertsPath = ApiClient.currentUserId != null && !ApiClient.currentUserId.isBlank()
                         ? "/api/currency/alerts?userId=" + ApiClient.currentUserId
                         : null;

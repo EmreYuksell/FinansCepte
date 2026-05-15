@@ -40,13 +40,23 @@ class CurrencyControllerTest {
     }
 
     @Test
-    void refreshRates_shouldReturnUpdatedList() throws Exception {
+    void refreshRates_shouldReturnUpdatedList_post() throws Exception {
         CurrencyRate rate = CurrencyRate.builder().symbol("BTC").name("BTC/TRY").rate(3_000_000).type("CRYPTO").build();
         when(currencyRateRepository.findAll()).thenReturn(List.of(rate));
 
         mockMvc.perform(post("/api/currency/rates/refresh"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].symbol").value("BTC"));
+    }
+
+    @Test
+    void refreshRates_shouldReturnUpdatedList_getQuery() throws Exception {
+        CurrencyRate rate = CurrencyRate.builder().symbol("USD").name("USD/TRY").rate(38.5).type("FIAT").build();
+        when(currencyRateRepository.findAll()).thenReturn(List.of(rate));
+
+        mockMvc.perform(get("/api/currency/rates").param("refresh", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].symbol").value("USD"));
     }
 
     @Test
