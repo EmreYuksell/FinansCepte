@@ -388,6 +388,19 @@
     -fx-font-weight: 600;
 }
 
+.login-link {
+    -fx-text-fill: #4f46e5;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.login-link:hover {
+    -fx-text-fill: #4338ca;
+    -fx-underline: true;
+}
+
 /* ============ DIALOG ============ */
 .dialog-root {
     -fx-background-color: #f0f2f5;

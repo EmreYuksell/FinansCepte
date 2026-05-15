@@ -78,8 +78,8 @@ public class CepteFinansApp extends Application {
         showLogin();
     }
 
-    // ================ LOGIN ================
-    private void showLogin() {
+    // ================ LOGIN / REGISTER ================
+    private void showAuthScene(Node cardContent) {
         VBox root = new VBox();
         root.getStyleClass().add("login-bg");
         root.setAlignment(Pos.CENTER);
@@ -88,7 +88,21 @@ public class CepteFinansApp extends Application {
         card.getStyleClass().add("login-card");
         card.setAlignment(Pos.CENTER);
         card.setMaxWidth(420);
+        card.getChildren().add(cardContent);
 
+        root.getChildren().add(card);
+        Scene scene = new Scene(root, 1200, 800);
+        scene.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
+        primaryStage.setScene(scene);
+        primaryStage.setMaximized(true);
+        primaryStage.show();
+    }
+
+    private void showLogin() {
+        showLogin(null);
+    }
+
+    private void showLogin(String prefilledEmail) {
         Label title = new Label("CepteFinans");
         title.getStyleClass().add("login-title");
 
@@ -96,58 +110,182 @@ public class CepteFinansApp extends Application {
         sub.getStyleClass().add("login-subtitle");
 
         VBox form = new VBox(14);
-        form.setPadding(new Insets(10,0,0,0));
+        form.setPadding(new Insets(10, 0, 0, 0));
 
-        Label eml = new Label("E-posta Adresi"); eml.getStyleClass().add("login-label");
-        TextField email = new TextField(); email.setPromptText("ornek@email.com"); email.getStyleClass().add("text-field");
+        Label eml = new Label("E-posta Adresi");
+        eml.getStyleClass().add("login-label");
+        TextField email = new TextField();
+        email.setPromptText("ornek@email.com");
+        email.getStyleClass().add("text-field");
+        if (prefilledEmail != null) {
+            email.setText(prefilledEmail);
+        }
 
-        Label psl = new Label("Şifre"); psl.getStyleClass().add("login-label");
-        PasswordField pass = new PasswordField(); pass.setPromptText("••••••••"); pass.getStyleClass().add("text-field");
+        Label psl = new Label("Şifre");
+        psl.getStyleClass().add("login-label");
+        PasswordField pass = new PasswordField();
+        pass.setPromptText("••••••••");
+        pass.getStyleClass().add("text-field");
 
         Button loginBtn = new Button("Giriş Yap");
         loginBtn.getStyleClass().addAll("btn", "btn-primary");
         loginBtn.setPrefWidth(340);
-        loginBtn.setOnAction(e -> {
-            String em = email.getText();
-            String pw = pass.getText();
-            if (em.isEmpty() || pw.isEmpty()) {
-                new Alert(Alert.AlertType.WARNING, "E-posta ve şifre gerekli.").show();
-                return;
-            }
-            new Thread(() -> {
-                try {
-                    String body = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", em, pw);
-                    String resp = ApiClient.post("/api/users/login", body);
-                    JsonNode json = new ObjectMapper().readTree(resp);
-                    String uid = json.get("id").asText();
-                    String uname = json.has("name") ? json.get("name").asText() : em;
-                    ApiClient.currentUserId = uid;
-                    Platform.runLater(() -> showMain(uid, uname));
-                } catch (Exception ex) {
-                    String errMsg = ex.getMessage();
-                    if (errMsg == null || errMsg.isBlank() || errMsg.equals("null")) errMsg = "Bilinmeyen bir hata oluştu. Backend bağlantısını veya şifrenizi kontrol edin.";
-                    final String msg = errMsg;
-                    Platform.runLater(() -> new Alert(Alert.AlertType.ERROR, "Giriş başarısız: " + msg).show());
-                }
-            }).start();
-        });
+        loginBtn.setOnAction(e -> performLogin(email.getText().trim(), pass.getText()));
 
         HBox extra = new HBox(10);
         extra.setAlignment(Pos.CENTER);
-        CheckBox remember = new CheckBox("Beni hatırla"); remember.setTextFill(Color.web("#888"));
-        Hyperlink forgot = new Hyperlink("Şifremi unuttum"); forgot.setTextFill(Color.web("#4f46e5"));
+        CheckBox remember = new CheckBox("Beni hatırla");
+        remember.setTextFill(Color.web("#888"));
+        Hyperlink forgot = new Hyperlink("Şifremi unuttum");
+        forgot.setTextFill(Color.web("#4f46e5"));
         extra.getChildren().addAll(remember, forgot);
 
-        form.getChildren().addAll(eml, email, psl, pass, loginBtn, extra);
+        HBox registerRow = new HBox(6);
+        registerRow.setAlignment(Pos.CENTER);
+        registerRow.setPadding(new Insets(8, 0, 0, 0));
+        Label noAccount = new Label("Hesabınız yok mu?");
+        noAccount.setTextFill(Color.web("#64748b"));
+        Hyperlink registerLink = new Hyperlink("Kayıt Ol");
+        registerLink.getStyleClass().add("login-link");
+        registerLink.setOnAction(e -> showRegister());
+        registerRow.getChildren().addAll(noAccount, registerLink);
 
-        card.getChildren().addAll(title, sub, form);
-        root.getChildren().add(card);
+        form.getChildren().addAll(eml, email, psl, pass, loginBtn, extra, registerRow);
 
-        Scene scene = new Scene(root, 1200, 800);
-        scene.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
-        primaryStage.setScene(scene);
-        primaryStage.setMaximized(true);
-        primaryStage.show();
+        VBox content = new VBox(0, title, sub, form);
+        content.setAlignment(Pos.CENTER);
+        showAuthScene(content);
+    }
+
+    private void showRegister() {
+        Label title = new Label("Hesap Oluştur");
+        title.getStyleClass().add("login-title");
+
+        Label sub = new Label("CepteFinans'a katılın");
+        sub.getStyleClass().add("login-subtitle");
+
+        VBox form = new VBox(14);
+        form.setPadding(new Insets(10, 0, 0, 0));
+
+        Label nameLbl = new Label("Ad Soyad");
+        nameLbl.getStyleClass().add("login-label");
+        TextField name = new TextField();
+        name.setPromptText("Adınız Soyadınız");
+        name.getStyleClass().add("text-field");
+
+        Label eml = new Label("E-posta Adresi");
+        eml.getStyleClass().add("login-label");
+        TextField email = new TextField();
+        email.setPromptText("ornek@email.com");
+        email.getStyleClass().add("text-field");
+
+        Label psl = new Label("Şifre");
+        psl.getStyleClass().add("login-label");
+        PasswordField pass = new PasswordField();
+        pass.setPromptText("En az 3 karakter");
+        pass.getStyleClass().add("text-field");
+
+        Label psl2 = new Label("Şifre (Tekrar)");
+        psl2.getStyleClass().add("login-label");
+        PasswordField pass2 = new PasswordField();
+        pass2.setPromptText("Şifrenizi tekrar girin");
+        pass2.getStyleClass().add("text-field");
+
+        Button registerBtn = new Button("Kayıt Ol");
+        registerBtn.getStyleClass().addAll("btn", "btn-success");
+        registerBtn.setPrefWidth(340);
+        registerBtn.setOnAction(e -> performRegister(
+                name.getText().trim(),
+                email.getText().trim(),
+                pass.getText(),
+                pass2.getText()
+        ));
+
+        HBox loginRow = new HBox(6);
+        loginRow.setAlignment(Pos.CENTER);
+        loginRow.setPadding(new Insets(8, 0, 0, 0));
+        Label hasAccount = new Label("Zaten hesabınız var mı?");
+        hasAccount.setTextFill(Color.web("#64748b"));
+        Hyperlink loginLink = new Hyperlink("Giriş Yap");
+        loginLink.getStyleClass().add("login-link");
+        loginLink.setOnAction(ev -> showLogin());
+        loginRow.getChildren().addAll(hasAccount, loginLink);
+
+        form.getChildren().addAll(nameLbl, name, eml, email, psl, pass, psl2, pass2, registerBtn, loginRow);
+
+        VBox content = new VBox(0, title, sub, form);
+        content.setAlignment(Pos.CENTER);
+        showAuthScene(content);
+    }
+
+    private void performLogin(String em, String pw) {
+        if (em.isEmpty() || pw.isEmpty()) {
+            new Alert(Alert.AlertType.WARNING, "E-posta ve şifre gerekli.").show();
+            return;
+        }
+        new Thread(() -> {
+            try {
+                ObjectNode body = mapper.createObjectNode();
+                body.put("email", em);
+                body.put("password", pw);
+                String resp = ApiClient.post("/api/users/login", mapper.writeValueAsString(body));
+                JsonNode json = mapper.readTree(resp);
+                String uid = json.get("id").asText();
+                String uname = json.has("name") ? json.get("name").asText() : em;
+                ApiClient.currentUserId = uid;
+                Platform.runLater(() -> showMain(uid, uname));
+            } catch (Exception ex) {
+                Platform.runLater(() -> new Alert(Alert.AlertType.ERROR,
+                        "Giriş başarısız: " + formatError(ex)).show());
+            }
+        }).start();
+    }
+
+    private void performRegister(String name, String email, String password, String passwordConfirm) {
+        if (name.isBlank()) {
+            new Alert(Alert.AlertType.WARNING, "Ad soyad gerekli.").show();
+            return;
+        }
+        if (email.isBlank() || !email.contains("@")) {
+            new Alert(Alert.AlertType.WARNING, "Geçerli bir e-posta girin.").show();
+            return;
+        }
+        if (password.length() < 3) {
+            new Alert(Alert.AlertType.WARNING, "Şifre en az 3 karakter olmalıdır.").show();
+            return;
+        }
+        if (!password.equals(passwordConfirm)) {
+            new Alert(Alert.AlertType.WARNING, "Şifreler eşleşmiyor.").show();
+            return;
+        }
+        new Thread(() -> {
+            try {
+                ObjectNode body = mapper.createObjectNode();
+                body.put("name", name);
+                body.put("email", email);
+                body.put("password", password);
+                String resp = ApiClient.post("/api/users", mapper.writeValueAsString(body));
+                JsonNode json = mapper.readTree(resp);
+                String uid = json.get("id").asText();
+                String uname = json.has("name") ? json.get("name").asText() : name;
+                ApiClient.currentUserId = uid;
+                Platform.runLater(() -> {
+                    new Alert(Alert.AlertType.INFORMATION, "Kayıt başarılı. Hoş geldiniz, " + uname + "!").show();
+                    showMain(uid, uname);
+                });
+            } catch (Exception ex) {
+                Platform.runLater(() -> new Alert(Alert.AlertType.ERROR,
+                        "Kayıt başarısız: " + formatError(ex)).show());
+            }
+        }).start();
+    }
+
+    private static String formatError(Exception ex) {
+        String errMsg = ex.getMessage();
+        if (errMsg == null || errMsg.isBlank() || "null".equals(errMsg)) {
+            return "Bilinmeyen bir hata oluştu. Backend bağlantısını kontrol edin.";
+        }
+        return errMsg;
     }
 
     // ================ MAIN APP ================
